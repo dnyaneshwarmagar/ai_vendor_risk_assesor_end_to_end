@@ -44,3 +44,14 @@ def test_approved_vendor_entry_access_and_tiers(library):
     assert e["status"] == "approved" and e["tier"] == "T2"
     assert library.approved_vendor_entry("LedgerLens AI", ["procurement"])["status"] == "in_progress"
     assert library.approved_vendor_entry("Nobody Inc", ["procurement"]) is None
+
+
+def test_draft_policy_excluded_by_default(library):
+    hits = library.search("customer personal data stored Singapore draft auto-approval", ["public", "employees"])
+    assert all(h.doc != "ai_acceptable_use_policy_2027_draft.md" for h in hits)
+    assert all(h.status != "draft" for h in hits)
+
+
+def test_new_runbook_and_bc_clauses_chunked(library):
+    ids = {c.clause_id for c in library.chunks}
+    assert {"IR-2.1", "BC-1.1"} <= ids

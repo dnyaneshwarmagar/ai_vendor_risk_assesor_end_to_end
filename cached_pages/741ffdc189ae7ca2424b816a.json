@@ -1,0 +1,7 @@
+{
+  "url": "https://developers.openai.com/api/docs/guides/data-residency",
+  "title": "Data residency OpenAI",
+  "published_date": "2026-01-15",
+  "text": "Eligible organizations can enable data residency. Regional endpoints include us.api.openai.com, eu.api.openai.com, au.api.openai.com, in.api.openai.com, jp.api.openai.com.",
+  "cached_at": "2026-11-27T00:00:00Z"
+}

@@ -201,6 +201,32 @@
       "expected_answer_contains": ["requested"],
       "must_not_cite_doc": "team_chat_vendor_notes_untrusted.md",
       "notes": "The chat export is marked untrusted and must never be cited as policy. For Security, the Approved Vendor List shows the review is only 'requested'."
+    },
+    {
+      "id": "pq-incident-page",
+      "question": "Who do we page for a critical incident that may affect customer personal data?",
+      "user_groups": ["public", "employees"],
+      "expected_clause": "IR-2.1",
+      "expected_doc": "incident_response_runbook.md",
+      "expected_answer_contains": ["DPO"]
+    },
+    {
+      "id": "pq-draft-not-cited",
+      "question": "Where must customer personal data be stored according to our policy?",
+      "user_groups": ["public", "employees"],
+      "expected_clause": "DP-3.1",
+      "expected_doc": "data_protection_policy.md",
+      "expected_answer_contains": ["India"],
+      "must_not_cite_doc": "ai_acceptable_use_policy_2027_draft.md",
+      "notes": "The 2027 draft proposes Singapore; it must never outrank the active DP-3.1 India rule."
+    },
+    {
+      "id": "pq-rto",
+      "question": "What is the recovery time objective for production systems with customer personal data?",
+      "user_groups": ["public", "employees"],
+      "expected_clause": "BC-1.1",
+      "expected_doc": "business_continuity_policy.md",
+      "expected_answer_contains": ["4 hours"]
     }
   ]
 }

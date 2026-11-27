@@ -13,6 +13,8 @@ from assessor.policy_rag import PolicyLibrary  # noqa: E402
 from assessor.schemas import VendorFact, VendorProfile  # noqa: E402
 
 SETTINGS.verbose = False
+# Unit tests stay deterministic: extractive answers, no live Ollama calls.
+SETTINGS.llm_provider = "mock"
 AS_OF = date(2026, 11, 1)
 
 

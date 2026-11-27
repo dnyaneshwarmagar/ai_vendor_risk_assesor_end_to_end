@@ -76,7 +76,9 @@ Then assess a **real** vendor:
 python run_assessor.py "Can our support team use <Tool> for ticket summaries?" --vendor "<Tool>" --domain <vendor.com> --tier T3 --users 35 --max-usd 0.30
 ```
 
-Live mode is a *baseline*: sequential, unplanned, one model. Making it good is the project (Milestone 2).
+Live mode uses a Plan Creator → Reviewer, parallel workers, and a shared budget (Milestone 2).
+For demos without the open internet: set `VRA_PAGE_CACHE=1` (reads `cached_pages/`).
+Score real-vendor fields: `python eval/field_accuracy.py --gold data/gold_set_real.json --profiles runs/.../profile.json`.
 
 ## 4. The code, in reading order
 

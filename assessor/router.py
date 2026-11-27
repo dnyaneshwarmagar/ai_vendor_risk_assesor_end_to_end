@@ -55,5 +55,9 @@ def decide(question: str, known_vendors: Iterable[str], llm: Optional[LLM] = Non
         return {"route": "policy", "vendor": None, "reason": "No vendor named → internal policy question."}
 
     llm = llm or LLM()
+    # Keep offline gold-set runs deterministic even when a live LLM is on for policy answers.
+    from .config import SETTINGS
+    if SETTINGS.search_provider == "offline" or llm.mock_mode:
+        return RouteDecision.model_validate(mock())
     return llm.structured(ROUTER_SYSTEM, f"Known vendors: {', '.join(known_vendors)}\nQuestion: {question}", RouteDecision,
                           stage="route", mock=mock)

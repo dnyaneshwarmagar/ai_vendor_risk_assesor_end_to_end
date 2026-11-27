@@ -42,7 +42,11 @@ def grade_relevance(question: str, context: str, llm: Optional[LLM] = None) -> G
         overlap = len(q & c)
         return {"verdict": overlap >= max(1, len(q) // 3), "reason": f"{overlap}/{len(q)} question terms found in context (heuristic)"}
 
-    return (llm or LLM()).structured(RELEVANCE_SYSTEM, f"Question: {question}\n\nContext:\n{context[:6000]}", GradeResult, stage="grade_relevance", mock=mock)
+    client = llm or LLM()
+    try:
+        return client.structured(RELEVANCE_SYSTEM, f"Question: {question}\n\nContext:\n{context[:6000]}", GradeResult, stage="grade_relevance", mock=mock)
+    except Exception:  # noqa: BLE001 — live grader loops must not crash the assessor
+        return GradeResult.model_validate(mock())
 
 
 def grade_grounded(answer: str, sources: str, llm: Optional[LLM] = None) -> GradeResult:
@@ -55,7 +59,11 @@ def grade_grounded(answer: str, sources: str, llm: Optional[LLM] = None) -> Grad
         unsupported = [s for s in sentences if len(set(tokenize(s)) & src) / max(1, len(set(tokenize(s)))) < 0.6]
         return {"verdict": not unsupported, "reason": ("all sentences supported" if not unsupported else f"unsupported: {unsupported[0][:80]}") + " (heuristic)"}
 
-    return (llm or LLM()).structured(GROUNDED_SYSTEM, f"Sources:\n{sources[:8000]}\n\nAnswer:\n{answer}", GradeResult, stage="grade_grounded", mock=mock)
+    client = llm or LLM()
+    try:
+        return client.structured(GROUNDED_SYSTEM, f"Sources:\n{sources[:8000]}\n\nAnswer:\n{answer}", GradeResult, stage="grade_grounded", mock=mock)
+    except Exception:  # noqa: BLE001
+        return GradeResult.model_validate(mock())
 
 
 def grade_policy_answer(pa: PolicyAnswer, llm: Optional[LLM] = None) -> PolicyAnswer:

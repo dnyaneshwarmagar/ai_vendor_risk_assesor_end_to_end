@@ -138,6 +138,52 @@ class VendorProfile(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# 1b. Planning contracts (Deep Search Module 3 / Lab 3) — live vendor research.
+# ---------------------------------------------------------------------------
+
+class EntityAnchor(BaseModel):
+    """What makes OUR vendor different from same-name look-alikes."""
+
+    name: str
+    official_domain: str = ""
+    product: str = Field(default="", description="Product / offering under review")
+    exclude: list[str] = Field(default_factory=list, description="Known look-alike names or domains")
+
+
+class SubQuestion(BaseModel):
+    id: str
+    question: str
+    fields: list[str] = Field(description="VENDOR_FIELDS this sub-question fills")
+    lens: Literal["entity", "claim", "time", "source_type", "decision"] = "claim"
+    priority: Literal["high", "medium", "low"] = "medium"
+    freshness_days: int = 365
+    preferred_sources: list[SourceType] = Field(default_factory=list)
+    high_stakes: bool = False
+    search_failures: int = Field(default=0, description="How many search attempts for this SQ have failed")
+
+
+class ResearchPlan(BaseModel):
+    goal: str
+    entity: EntityAnchor
+    sub_questions: list[SubQuestion] = Field(min_length=1)
+    source_strategy: list[str] = Field(default_factory=list)
+    validation_requirements: list[str] = Field(default_factory=list)
+    stop_criteria: list[str] = Field(default_factory=list)
+
+
+class PlanReview(BaseModel):
+    approved: bool
+    issues: list[str] = Field(default_factory=list)
+    fixes_applied: list[str] = Field(default_factory=list)
+
+
+class PlanDecision(BaseModel):
+    action: Literal["continue", "stop"]
+    reasons: list[str] = Field(default_factory=list)
+    open_sub_questions: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # 2. Policy library — what the RAG layer returns (Production RAG course Modules 8, 9, 11).
 # ---------------------------------------------------------------------------
 

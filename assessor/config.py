@@ -28,6 +28,9 @@ POLICY_DIR = DATA_DIR / "policies"
 VENDOR_CORPUS = DATA_DIR / "vendor_web" / "corpus.json"
 REQUIREMENTS_FILE = DATA_DIR / "requirements.yaml"
 GOLD_SET = DATA_DIR / "gold_set.json"
+GOLD_SET_REAL = DATA_DIR / "gold_set_real.json"
+VENDOR_MEMORY_DIR = DATA_DIR / "vendor_memory"
+CACHED_PAGES_DIR = ROOT / "cached_pages"
 RUNS_DIR = ROOT / "runs"
 
 
@@ -66,7 +69,12 @@ class Settings:
     as_of: date = field(default_factory=lambda: date.fromisoformat(_env("VRA_AS_OF", "2026-11-01")))
     max_usd: float = field(default_factory=lambda: _env_float("VRA_MAX_USD", 0.50))
     max_parallel: int = field(default_factory=lambda: _env_int("VRA_MAX_PARALLEL", 4))
+    max_plan_iterations: int = field(default_factory=lambda: _env_int("VRA_MAX_PLAN_ITERATIONS", 2))
     verbose: bool = field(default_factory=lambda: _env("VRA_VERBOSE", "1") == "1")
+    # Prefer HTML/text snapshots under cached_pages/ (demo / offline-ish live replay).
+    page_cache: bool = field(default_factory=lambda: _env("VRA_PAGE_CACHE", "0") == "1")
+    # Persist per-vendor URL memory so re-reviews skip unchanged pages.
+    use_vendor_memory: bool = field(default_factory=lambda: _env("VRA_VENDOR_MEMORY", "1") == "1")
 
     # --- Cost estimates (only used for the budget maths) --------------------
     price_in_per_mtok: float = field(default_factory=lambda: _env_float("PRICE_IN_PER_MTOK", 0.10))

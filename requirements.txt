@@ -3,12 +3,18 @@ pydantic>=2.7            # contracts between stages (schemas.py)
 pyyaml>=6.0              # data/requirements.yaml
 python-dotenv>=1.0       # reads .env
 pytest>=8                # python -m pytest -q
+numpy>=1.26              # hybrid retrieval vectors (Milestone 1)
+tiktoken>=0.7            # token budgets in rag_core generate/chunking
+
+# --- Milestone 1 policy RAG -----------------------------------------------------
+fastembed>=0.7           # embeddings + cross-encoder rerank
+wordllama>=0.3           # offline embedder fallback (no model download)
+openai>=1.40             # OpenAI-compatible client (Ollama, Gemini, Groq, …)
 
 # --- orchestration --------------------------------------------------------------
 langgraph>=1.0           # graph engine (the plain-Python engine works without it)
 
 # --- live mode (uncomment what you use) ------------------------------------------
-# openai>=1.40           # any OpenAI-compatible LLM: OpenAI, Gemini, Groq, Ollama, OpenRouter, Anthropic
 # ddgs>=9.0              # live web search, no key
 # tavily-python>=0.5     # live web search API
 # trafilatura>=2.0       # clean main text + dates from live pages

@@ -86,7 +86,7 @@ def run_cases(pipe: Pipeline, gold: dict) -> dict:
 def run_policy_questions(pipe: Pipeline, gold: dict) -> dict:
     rows, hard_total, hard_ok, soft_total, soft_ok = [], 0, 0, 0, 0
     for pq in gold.get("policy_questions", []):
-        pa = pipe.library.answer(pq["question"], pq["user_groups"])
+        pa = pipe.library.answer(pq["question"], pq["user_groups"], llm=pipe.llm)
         cited_docs = {c.doc for c in pa.citations}
         cited_clauses = {c.clause_id for c in pa.citations}
         top = pa.citations[0] if pa.citations else None
