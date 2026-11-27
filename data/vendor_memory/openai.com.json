@@ -1,0 +1,23 @@
+{
+  "domain": "openai.com",
+  "pages": {
+    "https://openai.com/enterprise-privacy/": {
+      "published_date": "2026-01-15",
+      "last_updated": null,
+      "retrieved_at": "2026-11-27"
+    },
+    "https://developers.openai.com/api/docs/guides/data-residency": {
+      "published_date": "2026-01-15",
+      "last_updated": null,
+      "retrieved_at": "2026-11-27"
+    },
+    "https://trust.openai.com/": {
+      "published_date": "2026-01-15",
+      "last_updated": null,
+      "retrieved_at": "2026-11-27"
+    }
+  },
+  "rejected_hosts": [],
+  "quarantined_hosts": [],
+  "last_run": "2026-11-26T23:26:44.568367+00:00"
+}

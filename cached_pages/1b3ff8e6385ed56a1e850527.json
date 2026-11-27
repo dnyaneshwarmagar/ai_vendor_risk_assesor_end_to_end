@@ -1,0 +1,7 @@
+{
+  "url": "https://openai.com/enterprise-privacy/",
+  "title": "Enterprise privacy at OpenAI",
+  "published_date": "2026-01-15",
+  "text": "We do not train our models on your business data by default. API inputs and outputs may be retained for up to 30 days. We are able to execute a Data Processing Addendum (DPA). Enterprise-level authentication through SAML SSO. OpenAI publishes a subprocessor list for the API Platform. Subprocessors include cloud hosting providers.",
+  "cached_at": "2026-11-27T00:00:00Z"
+}
