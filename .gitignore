@@ -15,6 +15,12 @@ runs/
 reports/
 logs/
 
+# M5 local stores
+data/assessor.db
+data/*.sqlite
+data/test_*.db
+data/test_*.sqlite
+
 # editors / OS
 .vscode/
 .idea/

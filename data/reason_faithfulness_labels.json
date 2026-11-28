@@ -1,0 +1,166 @@
+{
+  "_about": "20 hand-labelled assessment reasons for calibrating the M6 LLM-as-judge (faithfulness to cited evidence). label=faithful means every material claim in the reason is supported by evidence_text; unfaithful means at least one invented or contradicted claim.",
+  "as_of": "2026-11-28",
+  "labels": [
+    {
+      "id": "r01",
+      "requirement_id": "SEC-4.2",
+      "reason": "SOC 2 Type II is listed on the vendor trust centre.",
+      "evidence_text": "Trust Centre — Certifications: SOC 2 Type II (report available under NDA). Last audited 2025.",
+      "evidence_urls": ["https://ledgerlens.example/trust"],
+      "label": "faithful"
+    },
+    {
+      "id": "r02",
+      "requirement_id": "DP-3.1",
+      "reason": "India is an available data residency region on the public residency page.",
+      "evidence_text": "Data residency options: United States (Virginia), EU (Frankfurt), India (Mumbai).",
+      "evidence_urls": ["https://ledgerlens.example/residency"],
+      "label": "faithful"
+    },
+    {
+      "id": "r03",
+      "requirement_id": "AI-2.1",
+      "reason": "The vendor states customer content is not used to train foundation models by default.",
+      "evidence_text": "We do not train our models on your customer data unless you opt in to the improvement program.",
+      "evidence_urls": ["https://ledgerlens.example/ai"],
+      "label": "faithful"
+    },
+    {
+      "id": "r04",
+      "requirement_id": "SEC-7.1",
+      "reason": "SAML SSO is available on Business and Enterprise plans.",
+      "evidence_text": "Single sign-on (SAML 2.0) is included with Business and Enterprise.",
+      "evidence_urls": ["https://ledgerlens.example/pricing"],
+      "label": "faithful"
+    },
+    {
+      "id": "r05",
+      "requirement_id": "DP-2.2",
+      "reason": "A signed DPA is available for download from the legal centre.",
+      "evidence_text": "Data Processing Addendum (DPA) — download the current PDF and countersign.",
+      "evidence_urls": ["https://ledgerlens.example/legal/dpa"],
+      "label": "faithful"
+    },
+    {
+      "id": "r06",
+      "requirement_id": "SEC-9.3",
+      "reason": "No major security incidents with customer impact were disclosed in the last 24 months.",
+      "evidence_text": "Security notices: no customer-impacting incidents reported in 2025–2026.",
+      "evidence_urls": ["https://status.ledgerlens.example/"],
+      "label": "faithful"
+    },
+    {
+      "id": "r07",
+      "requirement_id": "AI-3.4",
+      "reason": "Default API retention is 30 days for abuse monitoring, then deleted.",
+      "evidence_text": "API logs are retained for up to 30 days for abuse monitoring, then deleted.",
+      "evidence_urls": ["https://openai.example/privacy"],
+      "label": "faithful"
+    },
+    {
+      "id": "r08",
+      "requirement_id": "PROC-1.1",
+      "reason": "Subprocessor list names AWS as the primary hosting provider.",
+      "evidence_text": "Current subprocessors: Amazon Web Services (hosting, United States).",
+      "evidence_urls": ["https://ledgerlens.example/subprocessors"],
+      "label": "faithful"
+    },
+    {
+      "id": "r09",
+      "requirement_id": "DP-3.1",
+      "reason": "Vendor fails India residency because only US and EU regions are listed.",
+      "evidence_text": "Available regions: United States, European Union. Planned: Japan.",
+      "evidence_urls": ["https://notion.example/residency"],
+      "label": "faithful"
+    },
+    {
+      "id": "r10",
+      "requirement_id": "SEC-4.2",
+      "reason": "ISO 27001 certificate is published with a valid-until date of 2027.",
+      "evidence_text": "ISO/IEC 27001:2022 certificate issued by BSI, valid until 2027-03-01.",
+      "evidence_urls": ["https://quilldesk.example/trust"],
+      "label": "faithful"
+    },
+    {
+      "id": "r11",
+      "requirement_id": "SEC-4.2",
+      "reason": "Vendor holds FedRAMP High authorization for all SaaS tiers.",
+      "evidence_text": "Trust Centre — Certifications: SOC 2 Type II (report available under NDA).",
+      "evidence_urls": ["https://ledgerlens.example/trust"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r12",
+      "requirement_id": "DP-3.1",
+      "reason": "India Mumbai region is currently available for all customers.",
+      "evidence_text": "Available regions: United States, European Union. Planned: Japan.",
+      "evidence_urls": ["https://notion.example/residency"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r13",
+      "requirement_id": "AI-2.1",
+      "reason": "Customer tickets are used nightly to fine-tune the production model.",
+      "evidence_text": "We do not train our models on your customer data unless you opt in to the improvement program.",
+      "evidence_urls": ["https://ledgerlens.example/ai"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r14",
+      "requirement_id": "SEC-7.1",
+      "reason": "SAML SSO is free on every plan including Free.",
+      "evidence_text": "Single sign-on (SAML 2.0) is included with Business and Enterprise.",
+      "evidence_urls": ["https://ledgerlens.example/pricing"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r15",
+      "requirement_id": "DP-2.2",
+      "reason": "No DPA is offered; customers must rely on the privacy policy alone.",
+      "evidence_text": "Data Processing Addendum (DPA) — download the current PDF and countersign.",
+      "evidence_urls": ["https://ledgerlens.example/legal/dpa"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r16",
+      "requirement_id": "SEC-9.3",
+      "reason": "A ransomware incident in 2025 affected all customer tenants.",
+      "evidence_text": "Security notices: no customer-impacting incidents reported in 2025–2026.",
+      "evidence_urls": ["https://status.ledgerlens.example/"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r17",
+      "requirement_id": "AI-3.4",
+      "reason": "Logs are retained forever for model evaluation.",
+      "evidence_text": "API logs are retained for up to 30 days for abuse monitoring, then deleted.",
+      "evidence_urls": ["https://openai.example/privacy"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r18",
+      "requirement_id": "PROC-1.1",
+      "reason": "OpenAI is listed as a model-provider subprocessor for all plans.",
+      "evidence_text": "Current subprocessors: Amazon Web Services (hosting, United States).",
+      "evidence_urls": ["https://ledgerlens.example/subprocessors"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r19",
+      "requirement_id": "DP-5.4",
+      "reason": "Deletion on request completes within 7 days as required by policy.",
+      "evidence_text": "Privacy policy discusses retention at a high level but does not state deletion timelines.",
+      "evidence_urls": ["https://parakeet.example/privacy"],
+      "label": "unfaithful"
+    },
+    {
+      "id": "r20",
+      "requirement_id": "SEC-4.2",
+      "reason": "The UK affiliate’s ISO 27001 covers the SaaS product globally.",
+      "evidence_text": "About LedgerLens UK (Manchester accountancy): ISO 27001 for local bookkeeping systems.",
+      "evidence_urls": ["https://ledgerlens-uk.example/about-us"],
+      "label": "unfaithful"
+    }
+  ]
+}

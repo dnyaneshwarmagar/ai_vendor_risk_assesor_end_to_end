@@ -1,0 +1,38 @@
+{
+  "_about": "Milestone 3 routing benchmark: 30 questions — 10 each for policy, vendor, assessment (awkward cases included). Refuse covered in unit tests + a few extras scored separately if present. Score with eval/run_routing_eval.py.",
+  "known_vendors": ["LedgerLens AI", "QuillDesk", "Parakeet Translate", "Notion", "OpenAI", "HubSpot"],
+  "cases": [
+    {"id": "p01", "question": "Where must customer personal data be stored?", "route": "policy"},
+    {"id": "p02", "question": "Who approves a T3 tool?", "route": "policy"},
+    {"id": "p03", "question": "Which tier is Parakeet Translate approved for?", "route": "policy"},
+    {"id": "p04", "question": "What does clause DP-3.1 require?", "route": "policy"},
+    {"id": "p05", "question": "What is our RTO for critical SaaS tools?", "route": "policy"},
+    {"id": "p06", "question": "Does our AI acceptable use policy allow training on customer tickets?", "route": "policy"},
+    {"id": "p07", "question": "What security questionnaire must vendors complete?", "route": "policy"},
+    {"id": "p08", "question": "Is LedgerLens AI on the Approved Vendor List and for which tier?", "route": "policy"},
+    {"id": "p09", "question": "When must the DPO be notified of a vendor incident?", "route": "policy"},
+    {"id": "p10", "question": "What retention period does our data protection policy require after contract end?", "route": "policy"},
+
+    {"id": "v01", "question": "Does QuillDesk have SOC 2?", "route": "vendor"},
+    {"id": "v02", "question": "Where does LedgerLens AI store data?", "route": "vendor"},
+    {"id": "v03", "question": "Has Parakeet Translate published a DPA?", "route": "vendor"},
+    {"id": "v04", "question": "What subprocessors does Notion list?", "route": "vendor"},
+    {"id": "v05", "question": "Does OpenAI train on API customer data by default?", "route": "vendor"},
+    {"id": "v06", "question": "Does HubSpot offer SAML SSO?", "route": "vendor"},
+    {"id": "v07", "question": "Any security incidents disclosed by QuillDesk in the last 24 months?", "route": "vendor"},
+    {"id": "v08", "question": "Is LedgerLens AI ISO 27001 certified?", "route": "vendor"},
+    {"id": "v09", "question": "What data regions does Parakeet Translate offer?", "route": "vendor"},
+    {"id": "v10", "question": "Does Notion publish a trust centre with SOC 2 Type II?", "route": "vendor"},
+
+    {"id": "a01", "question": "Can our support team use LedgerLens AI to summarise customer tickets?", "route": "assessment"},
+    {"id": "a02", "question": "Should we adopt QuillDesk for marketing copy?", "route": "assessment"},
+    {"id": "a03", "question": "Please assess Parakeet Translate for T3", "route": "assessment"},
+    {"id": "a04", "question": "Is LedgerLens AI SOC 2 so we can use it?", "route": "assessment"},
+    {"id": "a05", "question": "May the product team use OpenAI for roadmap docs with customer data?", "route": "assessment"},
+    {"id": "a06", "question": "Can marketing use HubSpot for customer replies?", "route": "assessment"},
+    {"id": "a07", "question": "Is it okay to use Notion for customer ticket notes?", "route": "assessment"},
+    {"id": "a08", "question": "Evaluate QuillDesk against our T3 requirements", "route": "assessment"},
+    {"id": "a09", "question": "Should support onboard Parakeet Translate for chat translation?", "route": "assessment"},
+    {"id": "a10", "question": "Check whether we can buy LedgerLens AI for 40 support agents", "route": "assessment"}
+  ]
+}

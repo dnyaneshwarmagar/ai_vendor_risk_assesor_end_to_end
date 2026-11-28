@@ -89,8 +89,11 @@ def test_identity_gate_accepts_official_domain_in_mock_live(monkeypatch):
     assert ok is True
 
 
-def test_offline_research_unchanged_lookalike():
+def test_offline_research_unchanged_lookalike(monkeypatch):
     """Regression: offline suite behaviour must not break under M2 changes."""
+    from assessor import vendor_research as vr
+    monkeypatch.setattr(vr.SETTINGS, "search_provider", "offline")
+    monkeypatch.setattr(vr.SETTINGS, "llm_provider", "mock")
     profile = VendorResearcher().research("LedgerLens AI")
     assert "https://ledgerlens-uk.example/about-us" in profile.rejected
     assert "security_certifications" in profile.facts

@@ -46,7 +46,7 @@ flowchart TD
 
 ### 2. `route` — [`assessor/router.py`](../assessor/router.py)
 
-Classifies the question into one of four routes (rule-based mock offline; LLM router is Milestone 3):
+Classifies the question into one of four routes (regex mock offline; LLM Router agent when live / `VRA_FORCE_LLM_ROUTER=1` — see [`m3-router-graders.md`](m3-router-graders.md)):
 
 | Route | Meaning |
 |---|---|
@@ -83,6 +83,8 @@ Also detects / attaches the vendor name.
    Cannot approve if overall is `BLOCKED`
 
 5. **`report`** — [`assessor/report.py`](../assessor/report.py) + output guardrail  
+   M4 layers (intent → identity → regex/classifier quarantine → rumour drop → output): [`m4-security.md`](m4-security.md).  
+   M5 product shell (queued `/assess`, LangGraph interrupt, UI, observability): [`m5-product.md`](m5-product.md).  
    Writes `report.md`, `report.json`, `profile.json`, `trace.jsonl`, and optionally `vendor_questions.txt`
 
 ## Mental model

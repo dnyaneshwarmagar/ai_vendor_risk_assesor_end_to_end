@@ -17,10 +17,10 @@ Usage
   python eval/run_eval.py                 # full scorecard, writes reports/eval_report.md
   python eval/run_eval.py --strict        # exit code 1 if any threshold fails (for CI)
 
-LEARNER TODO — Milestone 6
-  * Add an LLM-as-judge metric for the *reasons* (are they faithful to the evidence?) — Deep Search Lab 11.
-  * Add your real-vendor gold set (data/gold_set_real.json) and run live; keep the fictional one for CI.
-  * Run an ablation: switch the identity gate off and watch the UK company's ISO certificate leak in.
+Milestone 6
+  * Reason faithfulness judge: `python eval/reason_judge.py --calibrate --strict` (20 hand labels).
+  * Real-vendor gold: `data/gold_set_real.json` (10×8) via `eval/run_live_eval.py` / `eval/field_accuracy.py`.
+  * Ablations: `python scripts/m6_ablation.py` → `reports/m6_ablation.md`.
 """
 
 from __future__ import annotations
@@ -42,8 +42,11 @@ THRESHOLDS = {"verdict_accuracy": 0.95, "overall_accuracy": 1.0, "guess_rate_max
 
 
 def run_cases(pipe: Pipeline, gold: dict) -> dict:
+    from eval.reason_judge import grade_reason_faithfulness
+
     rows, n_ok, n_total, guesses, safety_checks, safety_ok, costs = [], 0, 0, 0, 0, 0, []
     overall_ok = 0
+    faith_ok = faith_n = 0
     for case in gold["cases"]:
         t0 = time.time()
         s = new_state(case["question"], user_groups=case["user_groups"], tier=case["tier"], users=case["users"],
@@ -60,6 +63,20 @@ def run_cases(pipe: Pipeline, gold: dict) -> dict:
                 mism.append(f"{rid}: expected {exp}, got {got.get(rid)}")
             if exp in ("UNKNOWN", "NEEDS_REVIEW") and got.get(rid) in ("PASS", "FAIL"):
                 guesses += 1
+        for result in rep.results:
+            reason = (result.reason or "").strip()
+            if not reason:
+                continue
+            # Prefer claim display text from profile facts tied to this requirement's evidence.
+            evid_bits = []
+            for url in result.evidence_urls or []:
+                evid_bits.append(url)
+            for fact in (rep.profile.facts or {}).values():
+                if any(u in (fact.sources or []) for u in (result.evidence_urls or [])):
+                    evid_bits.append(fact.display or "")
+            evidence = "\n".join(b for b in evid_bits if b) or reason
+            faith_n += 1
+            faith_ok += grade_reason_faithfulness(reason, evidence, force_heuristic=True).verdict
         ov_ok = rep.overall == case["expected_overall"]
         overall_ok += ov_ok
         pf = rep.profile
@@ -78,9 +95,17 @@ def run_cases(pipe: Pipeline, gold: dict) -> dict:
         rows.append({"case": case["id"], "overall": f"{rep.overall} ({'ok' if ov_ok else 'expected ' + case['expected_overall']})",
                      "verdicts_ok": f"{len(case['expected_verdicts']) - len(mism)}/{len(case['expected_verdicts'])}",
                      "mismatches": "; ".join(mism) or "—", "time_s": round(time.time() - t0, 2)})
-    return {"rows": rows, "verdict_accuracy": n_ok / max(1, n_total), "overall_accuracy": overall_ok / max(1, len(gold["cases"])),
-            "guess_rate": guesses / max(1, n_total), "safety": safety_ok / max(1, safety_checks), "safety_checks": safety_checks,
-            "cost_usd": round(sum(costs), 4)}
+    return {
+        "rows": rows,
+        "verdict_accuracy": n_ok / max(1, n_total),
+        "overall_accuracy": overall_ok / max(1, len(gold["cases"])),
+        "guess_rate": guesses / max(1, n_total),
+        "safety": safety_ok / max(1, safety_checks),
+        "safety_checks": safety_checks,
+        "cost_usd": round(sum(costs), 4),
+        "reason_faithfulness": faith_ok / max(1, faith_n),
+        "reason_faithfulness_n": faith_n,
+    }
 
 
 def run_policy_questions(pipe: Pipeline, gold: dict) -> dict:
@@ -142,9 +167,25 @@ def main(argv=None) -> int:
         status[metric] = ok
         lines.append(f"| {metric} | {val:.2%} | {'≥' if higher else '≤'} {thr:.0%} | {'✅' if ok else '❌'} |")
     lines.append(f"| policy_qa_soft (clause/doc/content) | {pqs['policy_qa_soft']:.2%} | informational | — |")
+    lines.append(
+        f"| reason_faithfulness (heuristic judge) | {res.get('reason_faithfulness', 0):.2%} "
+        f"(n={res.get('reason_faithfulness_n', 0)}) | informational | — |"
+    )
     lines.append(f"| cost (all cases) | ${res['cost_usd']:.4f} | — | — |")
     lines.append(f"| wall time | {time.time() - t0:.1f}s | — | — |")
-    lines += ["", "## Assessment cases", "", "| Case | Overall | Verdicts | Mismatches | Time |", "|---|---|---|---|---|"]
+    lines += [
+        "",
+        "## M6 pointers",
+        "",
+        "- Judge calibration (20 hand labels): `python eval/reason_judge.py --calibrate --strict`",
+        "- Ablations: `python scripts/m6_ablation.py`",
+        "- Real-vendor gold (10×8): `data/gold_set_real.json` + `python eval/run_live_eval.py`",
+        "",
+        "## Assessment cases",
+        "",
+        "| Case | Overall | Verdicts | Mismatches | Time |",
+        "|---|---|---|---|---|",
+    ]
     for r in res["rows"]:
         lines.append(f"| {r['case']} | {r['overall']} | {r['verdicts_ok']} | {r['mismatches']} | {r['time_s']}s |")
     lines += ["", "## Policy questions", "", "| Question | Baseline known to fail | Checks |", "|---|---|---|"]

@@ -32,6 +32,7 @@ def build_questions(results: list[RequirementResult], library: PolicyLibrary) ->
 
 
 def as_email(vendor: str, questions: list[dict], requester: str = "Nimbu Mart Information Security") -> str:
+    """Email draft addressed from a *role*, never a named person (M4 privacy checklist)."""
     if not questions:
         return ""
     lines = [f"Subject: Security review questions — {vendor}", "",

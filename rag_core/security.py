@@ -89,6 +89,10 @@ INJECTION_PATTERNS = {
     "secrecy": r"\bdo not (mention|reveal|tell)\b.{0,30}\b(this|these|note|instructions?)\b",
     "exfiltration": r"\b(reveal|print|show|send)\b.{0,30}\b(system prompt|password|api key|secret|token)\b",
     "markup_injection": r"<\s*/?\s*(script|iframe|system|sources?)\b",
+    # Capstone / vendor-risk attacks that also appear in chat exports
+    "fake_verdict": r"\breport\s+pass\b|\breport that .{0,40}(compliant|approved|safe)",
+    "addressed_to_ai": r"note to (ai|assistants?)|reminder to all assistants|automated reviewers reading",
+    "bypass_checks": r"skip the (policy|security) checks",
 }
 
 

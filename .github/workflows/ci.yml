@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  offline-eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LLM_PROVIDER: mock
+      SEARCH_PROVIDER: offline
+      VRA_INLINE_QUEUE: "1"
+      VRA_VERBOSE: "0"
+      VRA_LLM_PLAN: "0"
+      VRA_AS_OF: "2026-11-01"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest fastapi "uvicorn[standard]" redis rq "psycopg[binary]" httpx langgraph-checkpoint-sqlite
+
+      - name: Pytest
+        run: python -m pytest -q --tb=line
+
+      - name: Offline gold eval (strict)
+        run: python eval/run_eval.py --strict
+
+      - name: Reason-judge calibration (strict)
+        run: python eval/reason_judge.py --calibrate --strict
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: |
+            reports/eval_report.md
+            reports/reason_judge_calibration.md
+          if-no-files-found: ignore

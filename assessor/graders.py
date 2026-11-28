@@ -4,12 +4,10 @@ graders.py — the two checks before an answer leaves the system.
 COURSE MAP
   Agentic RAG guide  "agents.py → Answer Grader" (is the retrieved text relevant to the question?) and
                      "Hallucination Grader" (is every statement in the answer supported by the sources?).
-  Production RAG     Module 9 "Reasoning, self-checks and guardrails"; Module 10 "Answer metrics" (faithfulness).
+  Production RAG     Module 9 "Reasoning, self-checks and guardrails"; Module 10 faithfulness.
 
-WHAT IS COMPLETE: offline heuristics (term overlap; sentence-level support) so the pipeline runs end to end.
-LEARNER TODO — Milestone 3: port the two grader agents' prompts, call them through `LLM.structured()` with
-  a {"verdict": "yes"|"no", "reason": ...} schema, and wire a retry: relevant=no → broaden the policy search
-  (include more chunks); grounded=no → regenerate with a stricter prompt, then abstain.
+Offline: heuristics so the pipeline runs end to end.
+Live: LLM.structured() with GradeResult; callers (policy_rag) own the retry loop.
 """
 
 from __future__ import annotations
@@ -29,11 +27,26 @@ class GradeResult(BaseModel):
     reason: str = ""
 
 
-RELEVANCE_SYSTEM = """You are the Answer Grader. Given a question and retrieved policy text, answer whether the text
-contains information that answers the question. Be strict: related topic is not enough. Return {"verdict": true|false, "reason": "..."}."""
+# Ported from Agentic RAG Study Kit create_answer_grader_agent / create_hallucination_grader_agent.
+RELEVANCE_SYSTEM = """You are the Answer Grader for Nimbu Mart's policy assistant.
 
-GROUNDED_SYSTEM = """You are the Hallucination Grader. Given sources and a draft answer, check that EVERY factual statement
-in the answer is supported by the sources. If any statement is not, verdict is false. Return {"verdict": true|false, "reason": "..."}."""
+Goal: filter out wrong or irrelevant retrievals.
+
+Backstory: You are a strict grader. You read the question and the retrieved policy text and judge
+only one thing: does this text actually address the question? Related topic is not enough — the
+key ideas needed to answer must be present. If the context cannot support an answer, verdict is false.
+
+Return JSON: {"verdict": true|false, "reason": "..."}."""
+
+GROUNDED_SYSTEM = """You are the Hallucination Grader for Nimbu Mart's policy assistant.
+
+Goal: catch made-up facts before they reach the user.
+
+Backstory: You are a fact checker. You compare the draft answer with the source text and decide
+whether every important claim is supported by that source. An answer that invents facts, clause
+ids, numbers, names or approvals that are not in the sources is a hallucination — verdict false.
+
+Return JSON: {"verdict": true|false, "reason": "..."}."""
 
 
 def grade_relevance(question: str, context: str, llm: Optional[LLM] = None) -> GradeResult:
@@ -44,14 +57,14 @@ def grade_relevance(question: str, context: str, llm: Optional[LLM] = None) -> G
 
     client = llm or LLM()
     try:
-        return client.structured(RELEVANCE_SYSTEM, f"Question: {question}\n\nContext:\n{context[:6000]}", GradeResult, stage="grade_relevance", mock=mock)
+        return client.structured(RELEVANCE_SYSTEM, f"Question: {question}\n\nContext:\n{context[:6000]}",
+                                 GradeResult, stage="grade_relevance", mock=mock)
     except Exception:  # noqa: BLE001 — live grader loops must not crash the assessor
         return GradeResult.model_validate(mock())
 
 
 def grade_grounded(answer: str, sources: str, llm: Optional[LLM] = None) -> GradeResult:
     def mock() -> dict:
-        # Every sentence of the answer must share most of its content words with the sources.
         src = set(tokenize(sources))
         body = re.sub(r"^[A-Z]{1,5}-[\d.]+:\s*", "", answer)
         body = re.sub(r"\(source:.*?\)\s*$", "", body).strip()
@@ -61,18 +74,26 @@ def grade_grounded(answer: str, sources: str, llm: Optional[LLM] = None) -> Grad
 
     client = llm or LLM()
     try:
-        return client.structured(GROUNDED_SYSTEM, f"Sources:\n{sources[:8000]}\n\nAnswer:\n{answer}", GradeResult, stage="grade_grounded", mock=mock)
+        return client.structured(GROUNDED_SYSTEM, f"Sources:\n{sources[:8000]}\n\nAnswer:\n{answer}",
+                                 GradeResult, stage="grade_grounded", mock=mock)
     except Exception:  # noqa: BLE001
         return GradeResult.model_validate(mock())
 
 
 def grade_policy_answer(pa: PolicyAnswer, llm: Optional[LLM] = None) -> PolicyAnswer:
+    """Single-pass grade. Retry / widen / regenerate lives in PolicyLibrary.answer (M3)."""
     if pa.abstained or not pa.citations:
         return pa
     ctx = "\n\n".join(h.text for h in pa.citations)
-    pa.grader_relevant = grade_relevance(pa.question, ctx, llm).verdict
-    pa.grader_grounded = grade_grounded(pa.answer, ctx, llm).verdict
-    if not pa.grader_grounded:
+    rel = grade_relevance(pa.question, ctx, llm)
+    ground = grade_grounded(pa.answer, ctx, llm)
+    pa.grader_relevant = rel.verdict
+    pa.grader_grounded = ground.verdict
+    if not pa.grader_relevant or not pa.grader_grounded:
         pa.abstained = True
-        pa.answer = "I found related policy text but could not produce an answer that is fully supported by it. Please read the cited clauses directly."
+        why = rel.reason if not pa.grader_relevant else ground.reason
+        pa.answer = (
+            "I found related policy text but could not produce an answer that is fully "
+            f"supported by it ({why}). Please read the cited clauses directly."
+        )
     return pa

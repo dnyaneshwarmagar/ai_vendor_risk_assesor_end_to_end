@@ -1,6 +1,6 @@
 {
-  "_about": "Hand-filled real-vendor gold set for Milestone 2. Checked manually from public trust/privacy pages — do not let the agent overwrite this file.",
-  "as_of": "2026-11-27",
+  "_about": "Hand-filled real-vendor gold set for M2/M6. Checked from public trust/privacy pages — do not let the agent overwrite this file. Mix: clear pass paths (India residency), clear blockers (no India), and messy edge cases.",
+  "as_of": "2026-11-28",
   "cases": [
     {
       "id": "real-notion",
@@ -10,7 +10,8 @@
       "tier": "T3",
       "users": 35,
       "user_groups": ["public", "employees", "security"],
-      "checked_on": "2026-11-27",
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_fail",
       "expected_facts": {
         "security_certifications": {
           "has": ["SOC 2 Type II", "ISO 27001"],
@@ -41,14 +42,14 @@
       },
       "expected_overall": "BLOCKED",
       "sources": [
-        {"field": "security_certifications", "url": "https://trust.notion.com/", "checked_on": "2026-11-27"},
-        {"field": "data_regions", "url": "https://www.notion.com/help/data-residency", "checked_on": "2026-11-27"},
-        {"field": "subprocessors", "url": "https://trust.notion.com/subprocessors", "checked_on": "2026-11-27"},
-        {"field": "trains_on_customer_data", "url": "https://www.notion.com/help/notion-ai-security-practices", "checked_on": "2026-11-27"},
-        {"field": "sso_saml", "url": "https://www.notion.com/help/saml-sso-configuration", "checked_on": "2026-11-27"},
-        {"field": "dpa_available", "url": "https://www.notion.com/help/privacy", "checked_on": "2026-11-27"}
+        {"field": "security_certifications", "url": "https://trust.notion.com/", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://www.notion.com/help/data-residency", "checked_on": "2026-11-28"},
+        {"field": "subprocessors", "url": "https://trust.notion.com/subprocessors", "checked_on": "2026-11-28"},
+        {"field": "trains_on_customer_data", "url": "https://www.notion.com/help/notion-ai-security-practices", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://www.notion.com/help/saml-sso-configuration", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://www.notion.com/help/privacy", "checked_on": "2026-11-28"}
       ],
-      "notes": "Trust centre is JS-heavy (Wolfia). India is not an available residency region (US/EU/Tokyo/Seoul). SSO on Business/Enterprise = paid_plans. Default training = no (opt-in LEAP/feedback only)."
+      "notes": "Clear fail: India not a residency option. Trust centre is JS-heavy."
     },
     {
       "id": "real-openai",
@@ -58,7 +59,8 @@
       "tier": "T3",
       "users": 35,
       "user_groups": ["public", "employees", "security"],
-      "checked_on": "2026-11-27",
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_pass",
       "expected_facts": {
         "security_certifications": {
           "has": ["SOC 2 Type II", "ISO 27001"],
@@ -89,13 +91,13 @@
       },
       "expected_overall": "CONDITIONAL",
       "sources": [
-        {"field": "security_certifications", "url": "https://trust.openai.com/", "checked_on": "2026-11-27"},
-        {"field": "trains_on_customer_data", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-27"},
-        {"field": "data_regions", "url": "https://developers.openai.com/api/docs/guides/data-residency", "checked_on": "2026-11-27"},
-        {"field": "data_retention", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-27"},
-        {"field": "dpa_available", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-27"}
+        {"field": "security_certifications", "url": "https://trust.openai.com/", "checked_on": "2026-11-28"},
+        {"field": "trains_on_customer_data", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://developers.openai.com/api/docs/guides/data-residency", "checked_on": "2026-11-28"},
+        {"field": "data_retention", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://openai.com/enterprise-privacy/", "checked_on": "2026-11-28"}
       ],
-      "notes": "API/Enterprise: no training by default (opt-in). API abuse logs retained up to 30 days. India residency via in.api.openai.com for eligible orgs. Trust portal (SafeBase) is JS-gated for report PDFs — public pages still state SOC 2 Type 2."
+      "notes": "Clear pass path for DP-3.1 via India residency. API no training by default."
     },
     {
       "id": "real-hubspot",
@@ -105,7 +107,8 @@
       "tier": "T3",
       "users": 35,
       "user_groups": ["public", "employees", "security"],
-      "checked_on": "2026-11-27",
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_fail",
       "expected_facts": {
         "security_certifications": {
           "has": ["SOC 2 Type II"],
@@ -120,10 +123,7 @@
         "subprocessors": {"count": 1, "has_model_provider": true},
         "data_retention": {"default_days": null, "deletion_on_request_days": null},
         "sso_saml": "enterprise_only",
-        "security_incidents": {
-          "major_count": 1,
-          "all_major_have_postmortem": true
-        },
+        "security_incidents": {"major_count": 1, "all_major_have_postmortem": true},
         "dpa_available": "yes"
       },
       "expected_verdicts": {
@@ -139,14 +139,344 @@
       },
       "expected_overall": "BLOCKED",
       "sources": [
-        {"field": "security_certifications", "url": "https://www.hubspot.com/security-and-compliance", "checked_on": "2026-11-27"},
-        {"field": "data_regions", "url": "https://www.hubspot.com/data-centers", "checked_on": "2026-11-27"},
-        {"field": "subprocessors", "url": "https://trust.hubspot.com/subprocessors", "checked_on": "2026-11-27"},
-        {"field": "dpa_available", "url": "https://legal.hubspot.com/dpa", "checked_on": "2026-11-27"},
-        {"field": "sso_saml", "url": "https://www.hubspot.com/products/single-sign-on", "checked_on": "2026-11-27"},
-        {"field": "security_incidents", "url": "https://trust.hubspot.com/", "checked_on": "2026-11-27"}
+        {"field": "security_certifications", "url": "https://www.hubspot.com/security-and-compliance", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://www.hubspot.com/data-centers", "checked_on": "2026-11-28"},
+        {"field": "subprocessors", "url": "https://trust.hubspot.com/subprocessors", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://legal.hubspot.com/dpa", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://www.hubspot.com/products/single-sign-on", "checked_on": "2026-11-28"},
+        {"field": "security_incidents", "url": "https://trust.hubspot.com/", "checked_on": "2026-11-28"}
       ],
-      "notes": "India not a HubSpot data-centre region. SSO is Enterprise-tier hubs. Aug/Sep 2025 Drift/Salesloft OAuth incident affected some HubSpot portals — disclosed on trust centre with customer notification (counts as major with published notice)."
+      "notes": "Clear fail on India. Drift/Salesloft OAuth incident counts as major with published notice."
+    },
+    {
+      "id": "real-zoho",
+      "question": "Can operations use Zoho CRM for customer accounts in India?",
+      "vendor": "Zoho",
+      "official_domain": "zoho.com",
+      "tier": "T3",
+      "users": 40,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_pass",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://www.zoho.com/compliance.html"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union", "India", "Australia", "Japan", "Canada"],
+          "india_available": true
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "paid_plans",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "PASS",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "CONDITIONAL",
+      "sources": [
+        {"field": "security_certifications", "url": "https://www.zoho.com/compliance.html", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://www.zoho.com/know-your-datacenter.html", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://www.zoho.com/privacy/privacy-faq.html", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://www.zoho.com/mail/help/adminconsole/saml-configuration.html", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Clear pass for DP-3.1: Mumbai/Chennai India DCs documented. DPA e-sign via admin Privacy tab."
+    },
+    {
+      "id": "real-slack",
+      "question": "Can support use Slack Connect for customer channel discussions?",
+      "vendor": "Slack",
+      "official_domain": "slack.com",
+      "tier": "T3",
+      "users": 50,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_pass",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://slack.com/trust/compliance"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union", "Australia", "Japan", "India"],
+          "india_available": true
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "paid_plans",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "PASS",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "CONDITIONAL",
+      "sources": [
+        {"field": "security_certifications", "url": "https://slack.com/trust/compliance", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://slack.com/trust/data-residency", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://slack.com/trust/compliance", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://slack.com/help/articles/205168057-Customize-your-workspace-authentication", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Clear pass path: Slack data residency includes India (Mumbai/Hyderabad) on eligible plans."
+    },
+    {
+      "id": "real-linear",
+      "question": "Can engineering use Linear for customer bug triage?",
+      "vendor": "Linear",
+      "official_domain": "linear.app",
+      "tier": "T3",
+      "users": 25,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_fail",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://linear.app/security"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union"],
+          "india_available": false
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "enterprise_only",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "FAIL",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "BLOCKED",
+      "sources": [
+        {"field": "security_certifications", "url": "https://linear.app/security", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://linear.app/security", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://linear.app/docs/saml", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://linear.app/dpa", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Clear fail: multi-region hosting is US or EU only — no India."
+    },
+    {
+      "id": "real-dropbox",
+      "question": "Can legal store signed customer contracts in Dropbox Business?",
+      "vendor": "Dropbox",
+      "official_domain": "dropbox.com",
+      "tier": "T3",
+      "users": 20,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "clear_fail",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://trust.dropbox.com/"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union", "Australia", "Japan", "United Kingdom"],
+          "india_available": false
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "paid_plans",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "FAIL",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "BLOCKED",
+      "sources": [
+        {"field": "security_certifications", "url": "https://trust.dropbox.com/", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://help.dropbox.com/security/data-transfers-storage-locations", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://assets.dropbox.com/documents/en-us/security/privacy/dfb-dpa.pdf", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://help.dropbox.com/account-access/sign-in-sso", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Clear fail on India residency for Nimbu Mart DP-3.1."
+    },
+    {
+      "id": "real-anthropic",
+      "question": "Can engineering use Anthropic Claude API for support reply drafts?",
+      "vendor": "Anthropic",
+      "official_domain": "anthropic.com",
+      "tier": "T3",
+      "users": 15,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "messy",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://support.claude.com/en/articles/10015870-what-certifications-has-anthropic-obtained"
+        },
+        "data_regions": {
+          "available": ["United States"],
+          "india_available": false
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "enterprise_only",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "FAIL",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "BLOCKED",
+      "sources": [
+        {"field": "security_certifications", "url": "https://support.claude.com/en/articles/10015870-what-certifications-has-anthropic-obtained", "checked_on": "2026-11-28"},
+        {"field": "trains_on_customer_data", "url": "https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://platform.claude.com/docs/en/manage-claude/data-residency", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://www.anthropic.com/legal/commercial-terms", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Messy: commercial API does not train by default, but first-party inference_geo is only us/global — India via Bedrock is a different channel. Score the direct Anthropic API surface."
+    },
+    {
+      "id": "real-atlassian",
+      "question": "Can support use Jira Cloud for customer defect tracking?",
+      "vendor": "Atlassian",
+      "official_domain": "atlassian.com",
+      "tier": "T3",
+      "users": 60,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "messy",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II", "ISO 27001"],
+          "evidence_level": "documented",
+          "best_source": "https://www.atlassian.com/trust/compliance"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union", "Australia", "Singapore", "Canada", "Japan", "South Korea", "India"],
+          "india_available": true
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "paid_plans",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "PASS",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "CONDITIONAL",
+      "sources": [
+        {"field": "security_certifications", "url": "https://www.atlassian.com/trust/compliance", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://www.atlassian.com/trust/privacy/data-residency", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://www.atlassian.com/legal/data-processing-addendum", "checked_on": "2026-11-28"},
+        {"field": "subprocessors", "url": "https://www.atlassian.com/legal/sub-processors", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://support.atlassian.com/security-and-access-policies/docs/configure-saml-single-sign-on-with-an-identity-provider/", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Messy: data residency / pinned location availability varies by product and plan; India pin exists for eligible Cloud products — treat as available when documented on trust residency page."
+    },
+    {
+      "id": "real-stripe",
+      "question": "Can finance use Stripe Checkout for customer card payments?",
+      "vendor": "Stripe",
+      "official_domain": "stripe.com",
+      "tier": "T3",
+      "users": 10,
+      "user_groups": ["public", "employees", "security"],
+      "checked_on": "2026-11-28",
+      "case_kind": "messy",
+      "expected_facts": {
+        "security_certifications": {
+          "has": ["SOC 2 Type II"],
+          "evidence_level": "documented",
+          "best_source": "https://stripe.com/docs/security"
+        },
+        "data_regions": {
+          "available": ["United States", "European Union"],
+          "india_available": false
+        },
+        "trains_on_customer_data": "no",
+        "subprocessors": {"count": 1, "has_model_provider": false},
+        "data_retention": {"default_days": null, "deletion_on_request_days": null},
+        "sso_saml": "enterprise_only",
+        "security_incidents": {"major_count": 0, "all_major_have_postmortem": true},
+        "dpa_available": "yes"
+      },
+      "expected_verdicts": {
+        "SEC-4.2": "PASS",
+        "DP-3.1": "FAIL",
+        "AI-2.1": "PASS",
+        "AI-3.4": "UNKNOWN",
+        "DP-5.4": "UNKNOWN",
+        "SEC-7.1": "PASS",
+        "SEC-9.3": "PASS",
+        "DP-2.2": "PASS",
+        "PROC-1.1": "UNKNOWN"
+      },
+      "expected_overall": "BLOCKED",
+      "sources": [
+        {"field": "security_certifications", "url": "https://stripe.com/docs/security", "checked_on": "2026-11-28"},
+        {"field": "dpa_available", "url": "https://stripe.com/legal/dpa", "checked_on": "2026-11-28"},
+        {"field": "data_regions", "url": "https://stripe.com/legal/dpa", "checked_on": "2026-11-28"},
+        {"field": "sso_saml", "url": "https://docs.stripe.com/get-started/account/sso", "checked_on": "2026-11-28"}
+      ],
+      "notes": "Messy payment processor: India entity/DPA exists, but DPA states transfers to Stripe LLC in the US for Services — score india_available false for product data residency (DP-3.1 blocker)."
     }
   ]
 }
