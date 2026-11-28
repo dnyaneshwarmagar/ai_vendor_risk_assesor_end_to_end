@@ -57,9 +57,10 @@ class Budget:
 class Tracer:
     """Writes runs/<timestamp>-<name>/trace.jsonl. Use `t.event(stage, **data)` liberally."""
 
-    def __init__(self, name: str = "assess", root: Path | None = None, enabled: bool = True):
+    def __init__(self, name: str = "assess", root: Path | None = None, enabled: bool = True,
+                 run_id: str | None = None):
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        self.run_id = f"{stamp}-{name}"
+        self.run_id = run_id or f"{stamp}-{name}"
         self.dir = (root or RUNS_DIR) / self.run_id
         self.enabled = enabled
         self.events: list[dict] = []

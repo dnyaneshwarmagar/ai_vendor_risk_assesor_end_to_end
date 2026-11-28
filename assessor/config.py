@@ -63,18 +63,31 @@ class Settings:
     # --- Search --------------------------------------------------------------
     search_provider: str = field(default_factory=lambda: _env("SEARCH_PROVIDER", "offline").lower())
     tavily_api_key: str = field(default_factory=lambda: _env("TAVILY_API_KEY", ""))
-    results_per_query: int = field(default_factory=lambda: _env_int("VRA_RESULTS_PER_QUERY", 5))
+    results_per_query: int = field(default_factory=lambda: _env_int("VRA_RESULTS_PER_QUERY", 3))
 
     # --- Agent behaviour -----------------------------------------------------
     as_of: date = field(default_factory=lambda: date.fromisoformat(_env("VRA_AS_OF", "2026-11-01")))
     max_usd: float = field(default_factory=lambda: _env_float("VRA_MAX_USD", 0.50))
-    max_parallel: int = field(default_factory=lambda: _env_int("VRA_MAX_PARALLEL", 4))
-    max_plan_iterations: int = field(default_factory=lambda: _env_int("VRA_MAX_PLAN_ITERATIONS", 2))
+    max_parallel: int = field(default_factory=lambda: _env_int("VRA_MAX_PARALLEL", 6))
+    max_plan_iterations: int = field(default_factory=lambda: _env_int("VRA_MAX_PLAN_ITERATIONS", 1))
+    # Cap pages fetched+extracted per live research (biggest latency lever after search count).
+    max_pages: int = field(default_factory=lambda: _env_int("VRA_MAX_PAGES", 5))
+    # 1 = ask main LLM to create the research plan (slow on local 7b). Default uses the
+    # deterministic mock plan + Plan Reviewer (same field coverage, seconds not minutes).
+    llm_plan: bool = field(default_factory=lambda: _env("VRA_LLM_PLAN", "0") == "1")
     verbose: bool = field(default_factory=lambda: _env("VRA_VERBOSE", "1") == "1")
     # Prefer HTML/text snapshots under cached_pages/ (demo / offline-ish live replay).
     page_cache: bool = field(default_factory=lambda: _env("VRA_PAGE_CACHE", "0") == "1")
     # Persist per-vendor URL memory so re-reviews skip unchanged pages.
     use_vendor_memory: bool = field(default_factory=lambda: _env("VRA_VENDOR_MEMORY", "1") == "1")
+    # Identity gate (reject look-alike domains). Set 0 only for M4/M6 ablation demos.
+    identity_gate: bool = field(default_factory=lambda: _env("VRA_IDENTITY_GATE", "1") == "1")
+    # Second injection layer behind regexes (heuristic always; LLM when provider ≠ mock).
+    injection_classifier: bool = field(default_factory=lambda: _env("VRA_INJECTION_CLASSIFIER", "1") == "1")
+    # Policy RAG cross-encoder / WordLlama reranker. Set 0 for M6 ablation.
+    use_reranker: bool = field(default_factory=lambda: _env("VRA_RERANKER", "1") == "1")
+    # Authority × freshness half-life on vendor claims. Set 0 for M6 ablation (freshness=1.0).
+    freshness_decay: bool = field(default_factory=lambda: _env("VRA_FRESHNESS_DECAY", "1") == "1")
 
     # --- Cost estimates (only used for the budget maths) --------------------
     price_in_per_mtok: float = field(default_factory=lambda: _env_float("PRICE_IN_PER_MTOK", 0.10))

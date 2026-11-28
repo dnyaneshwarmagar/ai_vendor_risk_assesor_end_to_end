@@ -43,6 +43,13 @@ Rules:
 5. Never present trust="untrusted" material as official policy.
 6. Keep the answer short: 1 to 4 sentences or a short list. Reply in the same language as the question."""
 
+POLICY_SYSTEM_STRICT = POLICY_SYSTEM + """
+
+STRICT MODE (regeneration after a failed groundedness check):
+- Quote or closely paraphrase the source; do not invent clause ids, dates, names or approvals.
+- If any part of the question is not covered by the sources, abstain with the exact insufficient-information sentence.
+- Every sentence must be traceable to a cited source id."""
+
 
 def tokenize(text: str) -> list[str]:
     text = text.lower()
@@ -107,10 +114,13 @@ def chunk_markdown(doc: str, text: str, meta: dict) -> list[PolicyChunk]:
 
 def _to_rag_chunk(pc: PolicyChunk, index: int):
     from rag_core.documents import Chunk, stable_chunk_id
-    from rag_core.security import detect_injection
 
-    hits = detect_injection(pc.text)
-    pc.injection_flag = bool(hits)
+    # Shared tripwire + classifier heuristics (M4) — same catch as vendor pages.
+    from .security import inspect_untrusted_text
+
+    verdict = inspect_untrusted_text(pc.text, llm=None, use_classifier=True)
+    hits = verdict.findings  # noqa: F841 — kept for debug parity with prior detect_injection
+    pc.injection_flag = verdict.is_injection
     meta = {
         "title": pc.title,
         "access": pc.access,
@@ -159,7 +169,9 @@ class PolicyLibrary:
         self.retriever.index(self._rag_chunks)
 
         if reranker == "auto":
-            self.reranker = get_reranker()
+            from .config import SETTINGS as _settings
+
+            self.reranker = get_reranker() if _settings.use_reranker else None
         elif reranker is None:
             self.reranker = None
         else:
@@ -281,7 +293,7 @@ class PolicyLibrary:
         text = f"{label}: " + " ".join(best) + f"  (source: {top.title}, v{top.version})"
         return PolicyAnswer(question=question, answer=text, citations=hits, mode="extractive")
 
-    def _grounded_ollama(self, question: str, hits: list[PolicyHit], llm) -> PolicyAnswer:
+    def _grounded_ollama(self, question: str, hits: list[PolicyHit], llm, *, strict: bool = False) -> PolicyAnswer:
         from rag_core.prompts import ABSTAIN, format_sources, user_prompt
 
         sources = []
@@ -297,9 +309,11 @@ class PolicyLibrary:
             }
             sources.append((f"S{i}", c))
 
+        system = POLICY_SYSTEM_STRICT if strict else POLICY_SYSTEM
         prompt = user_prompt(question, format_sources(sources))
+        stage = "policy_answer_strict" if strict else "policy_answer"
         try:
-            raw = llm.chat(POLICY_SYSTEM, prompt, stage="policy_answer",
+            raw = llm.chat(system, prompt, stage=stage,
                            mock=lambda: self._extractive(question, hits).answer)
         except Exception as exc:  # noqa: BLE001
             warnings.warn(f"Policy LLM failed ({exc}); falling back to extractive.", stacklevel=2)
@@ -316,6 +330,30 @@ class PolicyLibrary:
         if hits[0].version and f"v{hits[0].version}" not in answer:
             answer = answer + f"  (source: {hits[0].title}, v{hits[0].version})"
         return PolicyAnswer(question=question, answer=answer, citations=hits, mode="llm")
+
+    def _merge_hits(self, batches: list[list[PolicyHit]], k: int) -> list[PolicyHit]:
+        best: dict[str, PolicyHit] = {}
+        for batch in batches:
+            for h in batch:
+                key = f"{h.doc_id}:{h.clause_id}:{h.text[:80]}"
+                prev = best.get(key)
+                if prev is None or h.score >= prev.score:
+                    best[key] = h
+        return sorted(best.values(), key=lambda h: -h.score)[:k]
+
+    def _widen_search(self, question: str, user_groups: Iterable[str], *,
+                      include_archived: bool, include_draft: bool, k: int = 8) -> list[PolicyHit]:
+        """Not relevant → k=8 + query rewriting (Agentic RAG retry / Production RAG Ch.8)."""
+        try:
+            from rag_core.query_transform import multi_query
+            queries = multi_query(question, llm=None, n=3)
+        except Exception:  # noqa: BLE001
+            queries = [question]
+        batches = [
+            self.search(q, user_groups, k=k, include_archived=include_archived, include_draft=include_draft)
+            for q in queries
+        ]
+        return self._merge_hits(batches, k=k)
 
     def answer(self, question: str, user_groups: Iterable[str] = ("public",), *, llm=None, k: int = 4,
                include_archived: bool = False, include_draft: bool = False) -> PolicyAnswer:
@@ -339,19 +377,58 @@ class PolicyLibrary:
             except Exception:  # noqa: BLE001
                 use_llm = False
 
-        if use_llm:
-            pa = self._grounded_ollama(question, hits, llm)
+        if not use_llm:
+            return self._extractive(question, hits)
+
+        from .graders import grade_grounded, grade_relevance
+
+        pa = self._grounded_ollama(question, hits, llm, strict=False)
+        if pa.abstained:
+            return self._extractive(question, hits)
+
+        ctx = "\n\n".join(h.text for h in pa.citations)
+        rel = grade_relevance(question, ctx, llm)
+        pa.grader_relevant = rel.verdict
+
+        # Retry 1: not relevant → widen search (k=8) + query rewrite, then regenerate.
+        if not rel.verdict:
+            wide = self._widen_search(question, user_groups, include_archived=include_archived,
+                                      include_draft=include_draft, k=8)
+            if wide:
+                hits = wide
+                pa = self._grounded_ollama(question, hits, llm, strict=False)
+                if pa.abstained:
+                    return self._extractive(question, hits)
+                ctx = "\n\n".join(h.text for h in pa.citations)
+                rel = grade_relevance(question, ctx, llm)
+                pa.grader_relevant = rel.verdict
+
+        if not pa.grader_relevant:
+            pa.abstained = True
+            pa.answer = (
+                "I found related policy text but could not retrieve passages that clearly "
+                f"answer the question ({rel.reason}). Please rephrase or ask Procurement."
+            )
+            return pa
+
+        ground = grade_grounded(pa.answer, ctx, llm)
+        pa.grader_grounded = ground.verdict
+
+        # Retry 2: not grounded → regenerate once with a stricter prompt, then abstain.
+        if not ground.verdict:
+            pa = self._grounded_ollama(question, hits, llm, strict=True)
             if pa.abstained:
-                pa = self._extractive(question, hits)
-            else:
-                from .graders import grade_policy_answer
-                try:
-                    graded = grade_policy_answer(pa, llm)
-                except Exception:  # noqa: BLE001
-                    graded = pa
-                pa = self._extractive(question, hits) if graded.abstained else graded
-        else:
-            pa = self._extractive(question, hits)
+                return pa
+            ctx = "\n\n".join(h.text for h in pa.citations)
+            ground = grade_grounded(pa.answer, ctx, llm)
+            pa.grader_relevant = True
+            pa.grader_grounded = ground.verdict
+            if not ground.verdict:
+                pa.abstained = True
+                pa.answer = (
+                    "I found related policy text but could not produce an answer that is fully "
+                    f"supported by it ({ground.reason}). Please read the cited clauses directly."
+                )
         return pa
 
     # ------------------------------------------------------------------ the Approved Vendor List

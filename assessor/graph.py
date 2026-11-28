@@ -14,19 +14,18 @@ COURSE MAP
   Deep Search  Module 2 (workflows vs agents; the five patterns), Lab 12 (LangGraph version)
   Agentic RAG  "tasks.py" (how information flows from task to task — here it flows through `state`)
 
-LEARNER TODO — Milestone 5
-  * Add a checkpointer and `interrupt()` at human_gate so a run can pause for days and resume when the
-    approver clicks (LangGraph docs: human-in-the-loop). The CLI version below asks on the terminal.
-  * Stream node progress to the UI (app/ui.py) so a 60-second live run shows what it is doing.
+Milestone 5: LangGraph checkpointer + `interrupt()` at human_gate (pause for days, resume on approve).
+CLI `input()` remains the local placeholder; the API/UI resume path uses Command(resume=...).
 """
 
 from __future__ import annotations
 
 import time
 from datetime import date
+from pathlib import Path
 from typing import Any, Optional, TypedDict
 
-from .config import SETTINGS
+from .config import ROOT, SETTINGS
 from .graders import grade_policy_answer
 from .guardrails import check_intent, enforce_output_policy, redact_input
 from .llm import LLM
@@ -41,6 +40,11 @@ from .vendor_research import VendorResearcher
 
 APPROVERS = {"T1": ["Team lead"], "T2": ["Head of Information Security"], "T3": ["Head of Information Security", "DPO"]}
 
+# Durable LangGraph checkpoints (survives process restart when langgraph-checkpoint-sqlite is installed).
+CHECKPOINT_SQLITE = Path(
+    __import__("os").environ.get("VRA_CHECKPOINT_PATH", str(ROOT / "data" / "langgraph_checkpoints.sqlite"))
+)
+
 
 class State(TypedDict, total=False):
     """The shared workspace every node reads from and writes to (LangGraph merges updates per key)."""
@@ -53,8 +57,10 @@ class State(TypedDict, total=False):
     domain: Optional[str]
     requested_by: str
     interactive: bool
+    await_human: bool
     approver: Optional[str]
     decision: Optional[str]
+    approval_comment: Optional[str]
     route: Optional[str]
     refusal: Optional[str]
     policy_answer: Any
@@ -69,17 +75,19 @@ class State(TypedDict, total=False):
     answer: Optional[str]
     guardrail_notes: list[str]
     started: float
+    stage_timings: dict
 
 
 def new_state(question: str, *, user_groups: list[str] | None = None, tier: str = "T3", users: int = 1,
               vendor: str | None = None, domain: str | None = None, requested_by: str = "cli",
-              interactive: bool = False, approver: str | None = None, decision: str | None = None) -> dict:
+              interactive: bool = False, await_human: bool = False,
+              approver: str | None = None, decision: str | None = None) -> dict:
     return {"question": question, "user_groups": user_groups or ["public", "employees"], "tier": tier, "users": users,
             "vendor": vendor, "domain": domain, "requested_by": requested_by, "interactive": interactive,
-            "approver": approver, "decision": decision,
+            "await_human": await_human, "approver": approver, "decision": decision, "approval_comment": None,
             "route": None, "refusal": None, "policy_answer": None, "profile": None, "results": None, "overall": None,
             "overall_reason": None, "open_questions": [], "approval": None, "report": None, "answer": None,
-            "guardrail_notes": [], "started": time.time()}
+            "guardrail_notes": [], "started": time.time(), "stage_timings": {}}
 
 
 class Pipeline:
@@ -91,41 +99,66 @@ class Pipeline:
         self.researcher = VendorResearcher(budget=self.budget, tracer=tracer)
         self.llm = LLM(budget=self.budget, tracer=tracer)
         self.known_vendors = list(self.researcher.web.vendors)
+        self._checkpoint_conn = None
+        self._checkpointer_obj = None
 
     def _t(self, stage: str, **data: Any) -> None:
         if self.tracer:
             self.tracer.event(stage, **data)
 
+    def _timed(self, stage: str, s: dict, fn) -> dict:
+        t0 = time.time()
+        if self.tracer:
+            self.tracer.start(stage)
+        out = fn()
+        ms = round((time.time() - t0) * 1000, 1)
+        if self.tracer:
+            self.tracer.end(stage, **{k: v for k, v in (out or {}).items() if k not in ("profile", "report", "results", "request", "policy_answer")})
+        timings = dict(s.get("stage_timings") or {})
+        timings[stage] = ms
+        out = dict(out or {})
+        out["stage_timings"] = timings
+        return out
+
     # ------------------------------------------------------------------ nodes
     def guard_input(self, s: dict) -> dict:
-        q, notes = redact_input(s["question"])
-        refusal = check_intent(q)
-        self._t("guard_input", redactions=notes, refused=bool(refusal))
-        return {"question": q, "guardrail_notes": s["guardrail_notes"] + notes, "refusal": refusal,
-                "route": "refuse" if refusal else None}
+        def _run():
+            q, notes = redact_input(s["question"])
+            refusal = check_intent(q)
+            self._t("guard_input", redactions=notes, refused=bool(refusal))
+            return {"question": q, "guardrail_notes": s.get("guardrail_notes", []) + notes, "refusal": refusal,
+                    "route": "refuse" if refusal else None}
+        return self._timed("guard_input", s, _run)
 
     def route(self, s: dict) -> dict:
-        if s.get("route") == "refuse":
-            return {}
-        if s.get("vendor"):
-            d = decide(s["question"], self.known_vendors + [s["vendor"]], self.llm)
-            d.vendor = s["vendor"]
-        else:
-            d = decide(s["question"], self.known_vendors, self.llm)
-        self._t("route", route=d.route, vendor=d.vendor, reason=d.reason)
-        return {"route": d.route, "vendor": d.vendor or s.get("vendor")}
+        def _run():
+            if s.get("route") == "refuse":
+                return {}
+            if s.get("vendor"):
+                d = decide(s["question"], self.known_vendors + [s["vendor"]], self.llm)
+                d.vendor = s["vendor"]
+            else:
+                d = decide(s["question"], self.known_vendors, self.llm)
+            self._t("route", route=d.route, vendor=d.vendor, reason=d.reason)
+            return {"route": d.route, "vendor": d.vendor or s.get("vendor")}
+        return self._timed("route", s, _run)
 
     def policy_qa(self, s: dict) -> dict:
-        pa = self.library.answer(s["question"], s["user_groups"], llm=self.llm)
-        pa = grade_policy_answer(pa, self.llm)
-        self._t("policy_qa", abstained=pa.abstained, citations=[c.clause_id or c.heading for c in pa.citations[:3]],
-                relevant=pa.grader_relevant, grounded=pa.grader_grounded)
-        cites = "\n".join(f"  - {c.clause_id or c.heading} — {c.title} (v{c.version})" for c in pa.citations[:3])
-        return {"policy_answer": pa, "answer": pa.answer + ("\n\nSources:\n" + cites if cites else "")}
+        def _run():
+            pa = self.library.answer(s["question"], s["user_groups"], llm=self.llm)
+            if pa.grader_relevant is None and pa.grader_grounded is None and not pa.abstained:
+                pa = grade_policy_answer(pa, self.llm)
+            self._t("policy_qa", abstained=pa.abstained, citations=[c.clause_id or c.heading for c in pa.citations[:3]],
+                    relevant=pa.grader_relevant, grounded=pa.grader_grounded)
+            cites = "\n".join(f"  - {c.clause_id or c.heading} — {c.title} (v{c.version})" for c in pa.citations[:3])
+            return {"policy_answer": pa, "answer": pa.answer + ("\n\nSources:\n" + cites if cites else "")}
+        return self._timed("policy_qa", s, _run)
 
     def vendor_research(self, s: dict) -> dict:
-        profile = self.researcher.research(s["vendor"], s.get("domain"))
-        return {"profile": profile}
+        def _run():
+            profile = self.researcher.research(s["vendor"], s.get("domain"))
+            return {"profile": profile}
+        return self._timed("vendor_research", s, _run)
 
     def facts_only(self, s: dict) -> dict:
         pf = s["profile"]
@@ -138,57 +171,88 @@ class Pipeline:
         return {"answer": "\n".join(lines)}
 
     def match(self, s: dict) -> dict:
-        req = AssessmentRequest(question=s["question"], vendor=s["vendor"], official_domain=s["profile"].official_domain,
-                                tier=s["tier"], users=s["users"], user_groups=s["user_groups"], requested_by=s["requested_by"])
-        results = self.matcher.evaluate(s["profile"], req)
-        overall, reason = self.matcher.overall(results)
-        self._t("match", overall=overall, verdicts={r.requirement_id: r.verdict for r in results})
-        return {"request": req, "results": results, "overall": overall, "overall_reason": reason}
+        def _run():
+            req = AssessmentRequest(question=s["question"], vendor=s["vendor"], official_domain=s["profile"].official_domain,
+                                    tier=s["tier"], users=s["users"], user_groups=s["user_groups"], requested_by=s["requested_by"])
+            results = self.matcher.evaluate(s["profile"], req)
+            overall, reason = self.matcher.overall(results)
+            self._t("match", overall=overall, verdicts={r.requirement_id: r.verdict for r in results})
+            return {"request": req, "results": results, "overall": overall, "overall_reason": reason}
+        return self._timed("match", s, _run)
 
     def questionnaire(self, s: dict) -> dict:
-        qs = build_questions(s["results"], self.library)
-        self._t("questionnaire", questions=[q["id"] for q in qs])
-        return {"open_questions": qs}
+        def _run():
+            qs = build_questions(s["results"], self.library)
+            self._t("questionnaire", questions=[q["id"] for q in qs])
+            return {"open_questions": qs}
+        return self._timed("questionnaire", s, _run)
 
     def human_gate(self, s: dict) -> dict:
-        """A person decides. Offline/CI: status stays 'pending'. Interactive CLI: ask on the terminal."""
+        """A person decides. Product path: LangGraph interrupt() until /approve resumes."""
         roles = APPROVERS.get(s["tier"], [])
         approval = Approval(status="pending", approver_roles=roles)
         decision = s.get("decision")
+        approver = s.get("approver")
+        comment = s.get("approval_comment") or ""
+
+        # Milestone 5 — pause for days when the API/UI sets await_human and no decision yet.
+        if s.get("await_human") and decision is None and not s.get("interactive"):
+            from langgraph.types import interrupt  # noqa: WPS433
+            resume = interrupt({
+                "message": "Awaiting human approval",
+                "overall": s.get("overall"),
+                "overall_reason": s.get("overall_reason"),
+                "approver_roles": roles,
+                "vendor": s.get("vendor"),
+                "run_id": self.tracer.run_id if self.tracer else None,
+            })
+            if isinstance(resume, dict):
+                decision = resume.get("decision")
+                approver = resume.get("approver") or approver
+                comment = resume.get("comment") or comment
+            else:
+                decision = str(resume)
+
         if s.get("interactive") and decision is None:
             print(f"\nOutcome so far: {s['overall']} — {s['overall_reason']}")
             print(f"Approvers for {s['tier']}: {', '.join(roles)}")
             decision = input("Record a decision now? [approve / reject / leave pending]: ").strip().lower() or "pending"
+            approver = approver or "cli-user"
+
         if decision in ("approve", "approved") and s["overall"] != "BLOCKED":
-            approval = Approval(status="approved", approver_roles=roles, decided_by=s.get("approver") or "cli-user", decided_on=date.today(),
-                                comment="Recorded via CLI")
+            approval = Approval(status="approved", approver_roles=roles, decided_by=approver or "cli-user",
+                                decided_on=date.today(), comment=comment or "Recorded via human gate")
         elif decision in ("approve", "approved") and s["overall"] == "BLOCKED":
             approval.comment = "Approval refused by the gate: a blocking requirement failed. Resolve it or change the data tier."
         elif decision in ("reject", "rejected"):
-            approval = Approval(status="rejected", approver_roles=roles, decided_by=s.get("approver") or "cli-user", decided_on=date.today())
+            approval = Approval(status="rejected", approver_roles=roles, decided_by=approver or "cli-user",
+                                decided_on=date.today(), comment=comment)
         self._t("human_gate", status=approval.status, decided_by=approval.decided_by)
-        return {"approval": approval}
+        return {"approval": approval, "decision": decision, "approver": approver}
 
     def report(self, s: dict) -> dict:
-        rep = AssessmentReport(request=s["request"], profile=s["profile"], results=s["results"], overall=s["overall"],
-                               overall_reason=s["overall_reason"], open_questions=s["open_questions"], approval=s["approval"],
-                               guardrail_notes=list(s["guardrail_notes"]), run_id=self.tracer.run_id if self.tracer else "",
-                               cost_usd=round(self.budget.spent_usd, 4), llm_calls=self.budget.llm_calls,
-                               duration_s=round(time.time() - s["started"], 2))
-        before = [r.verdict for r in rep.results]
-        rep = enforce_output_policy(rep)
-        if [r.verdict for r in rep.results] != before:   # a downgrade changes the outcome too
-            rep.overall, rep.overall_reason = self.matcher.overall(rep.results)
-        md = to_markdown(rep)
-        if self.tracer:
-            self.tracer.write_text("report.md", md)
-            self.tracer.write_json("report.json", rep.model_dump(mode="json"))
-            self.tracer.write_json("profile.json", rep.profile.model_dump(mode="json"))
-            email = as_email(rep.request.vendor, rep.open_questions)
-            if email:
-                self.tracer.write_text("vendor_questions.txt", email)
-        self._t("report", overall=rep.overall, run_dir=str(self.tracer.dir) if self.tracer else None)
-        return {"report": rep, "answer": md}
+        def _run():
+            rep = AssessmentReport(request=s["request"], profile=s["profile"], results=s["results"], overall=s["overall"],
+                                   overall_reason=s["overall_reason"], open_questions=s["open_questions"], approval=s["approval"],
+                                   guardrail_notes=list(s.get("guardrail_notes") or []), run_id=self.tracer.run_id if self.tracer else "",
+                                   cost_usd=round(self.budget.spent_usd, 4), llm_calls=self.budget.llm_calls,
+                                   duration_s=round(time.time() - s["started"], 2))
+            before = [r.verdict for r in rep.results]
+            rep = enforce_output_policy(rep)
+            if [r.verdict for r in rep.results] != before:
+                rep.overall, rep.overall_reason = self.matcher.overall(rep.results)
+            md = to_markdown(rep)
+            if self.tracer:
+                self.tracer.write_text("report.md", md)
+                self.tracer.write_json("report.json", rep.model_dump(mode="json"))
+                self.tracer.write_json("profile.json", rep.profile.model_dump(mode="json"))
+                self.tracer.write_json("stage_timings.json", s.get("stage_timings") or {})
+                email = as_email(rep.request.vendor, rep.open_questions)
+                if email:
+                    self.tracer.write_text("vendor_questions.txt", email)
+            self._t("report", overall=rep.overall, run_dir=str(self.tracer.dir) if self.tracer else None)
+            return {"report": rep, "answer": md}
+        return self._timed("report", s, _run)
 
     def refuse(self, s: dict) -> dict:
         return {"answer": s.get("refusal") or "I can only help with vendor assessments and policy questions."}
@@ -213,7 +277,23 @@ class Pipeline:
             s.update(self.report(s))
         return s
 
-    def build_langgraph(self):
+    def _checkpointer(self):
+        """Prefer SQLite checkpointer (restart-safe); fall back to in-memory."""
+        if self._checkpointer_obj is not None:
+            return self._checkpointer_obj
+        CHECKPOINT_SQLITE.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            import sqlite3
+            from langgraph.checkpoint.sqlite import SqliteSaver  # noqa: WPS433
+            self._checkpoint_conn = sqlite3.connect(str(CHECKPOINT_SQLITE), check_same_thread=False)
+            self._checkpointer_obj = SqliteSaver(self._checkpoint_conn)
+            return self._checkpointer_obj
+        except Exception:
+            from langgraph.checkpoint.memory import MemorySaver  # noqa: WPS433
+            self._checkpointer_obj = MemorySaver()
+            return self._checkpointer_obj
+
+    def build_langgraph(self, *, checkpointer=None):
         """The same nodes as a LangGraph state machine. Requires: pip install langgraph."""
         from langgraph.graph import END, START, StateGraph  # noqa: WPS433
 
@@ -232,18 +312,34 @@ class Pipeline:
         g.add_edge("human_gate", "report")
         for leaf in ("policy_qa", "facts_only", "report", "refuse"):
             g.add_edge(leaf, END)
-        return g.compile()
+        cp = checkpointer if checkpointer is not None else self._checkpointer()
+        return g.compile(checkpointer=cp)
 
-    def run(self, s: dict, engine: str = "auto") -> dict:
-        if engine in ("auto", "langgraph"):
+    def run(self, s: dict, engine: str = "auto", *, thread_id: str | None = None) -> dict:
+        # Product assessments that await a human need a thread_id + checkpointer.
+        use_hitl = bool(s.get("await_human")) and engine != "plain"
+        if engine in ("auto", "langgraph") or use_hitl:
             try:
                 graph = self.build_langgraph()
-                self._t("engine", name="langgraph")
-                out = graph.invoke(s)
+                self._t("engine", name="langgraph", await_human=bool(s.get("await_human")))
+                cfg = {"configurable": {"thread_id": thread_id or (self.tracer.run_id if self.tracer else "cli")}}
+                out = graph.invoke(s, cfg)
                 s.update(out)
                 return s
             except ImportError:
-                if engine == "langgraph":
+                if engine == "langgraph" or use_hitl:
                     raise
         self._t("engine", name="plain")
         return self.run_plain(s)
+
+    def resume(self, thread_id: str, decision: str, approver: str, comment: str = "") -> dict:
+        """Resume a paused assessment after the approver decides (survives restart with SqliteSaver)."""
+        from langgraph.types import Command  # noqa: WPS433
+
+        graph = self.build_langgraph()
+        cfg = {"configurable": {"thread_id": thread_id}}
+        out = graph.invoke(
+            Command(resume={"decision": decision, "approver": approver, "comment": comment}),
+            cfg,
+        )
+        return out

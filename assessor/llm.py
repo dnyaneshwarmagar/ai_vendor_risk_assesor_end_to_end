@@ -59,7 +59,8 @@ class LLM:
                 from openai import OpenAI
             except ImportError as exc:  # pragma: no cover
                 raise LLMError("Live mode needs the openai package: pip install openai") from exc
-            self._client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=90, max_retries=2)
+            # Keep timeouts tight for local Ollama — long stalls were dominating live research.
+            self._client = OpenAI(api_key=cfg["api_key"], base_url=cfg["base_url"], timeout=45, max_retries=1)
 
     @classmethod
     def small(cls, budget: Budget | None = None, tracer: Tracer | None = None) -> "LLM":

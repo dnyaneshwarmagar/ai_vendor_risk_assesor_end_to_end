@@ -275,6 +275,8 @@ class RouteDecision(BaseModel):
 
 
 class AssessmentRequest(BaseModel):
+    """Intake for one assessment. Holds no personal data of vendor employees (M4 privacy checklist)."""
+
     question: str
     vendor: str
     official_domain: Optional[str] = None

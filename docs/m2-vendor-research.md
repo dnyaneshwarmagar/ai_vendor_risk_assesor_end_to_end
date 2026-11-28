@@ -71,9 +71,15 @@ LLM_MODEL=qwen2.5:7b
 LLM_SMALL_MODEL=qwen2.5:3b
 SEARCH_PROVIDER=ddgs       # or tavily + TAVILY_API_KEY
 VRA_MAX_USD=0.50
-VRA_MAX_PARALLEL=4
-# optional: VRA_PAGE_CACHE=1 to prefer cached_pages/ when present
+VRA_MAX_PARALLEL=6
+VRA_MAX_PLAN_ITERATIONS=1  # official seeds + site: queries usually enough
+VRA_RESULTS_PER_QUERY=3
+VRA_MAX_PAGES=5            # hard cap on fetch+extract pages (biggest latency lever)
+VRA_LLM_PLAN=0             # skip slow local Plan Creator JSON call
+VRA_PAGE_CACHE=1           # reuse cached_pages/ on re-runs
 ```
+
+Live research was slow (~5-6 min/vendor) mainly from serial DDGS fallthrough plus local Ollama plan/extract. Now: official URL seeds (cached first), one query per field, no DDGS when `VRA_PAGE_CACHE=1`, `VRA_MAX_PAGES` cap, rule extract before LLM, and mock plan by default (`VRA_LLM_PLAN=0`).
 
 ```bash
 pip install openai ddgs trafilatura httpx

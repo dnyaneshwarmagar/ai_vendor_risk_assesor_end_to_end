@@ -107,14 +107,17 @@ DEFAULT_STOP_CRITERIA = [
     "budget is nearly exhausted",
 ]
 
-# Deep Search Module 8 + Production RAG Module 11: patterns that mark a page as an attack on the reader.
+# Deep Search Module 8 + Production RAG Module 11 — regex tripwire (Layer 1).
+# Layer 2 (classifier) lives in assessor.security.inspect_untrusted_text.
 INJECTION_PATTERNS = [
-    r"ignore\s+(all\s+|any\s+)?(previous|prior|above|other)\s+(instructions|sources)",
+    r"ignore\s+(all\s+|any\s+|the\s+)?(previous|prior|above|other|earlier)\s+(instructions|sources|prompts|messages)",
     r"(ai|language model|assistant|llm|automated reviewer|reviewer)s?\s+(reading|processing|parsing)\s+this",
     r"note to (ai|assistants|automated reviewers)",
+    r"reminder to all assistants",
     r"report\s+pass\b", r"report that .{0,40}(compliant|approved|safe)",
-    r"skip the (policy|security) checks", r"disregard .{0,30}(sources|instructions)",
-    r"you are now", r"system prompt",
+    r"skip the (policy|security) checks", r"disregard .{0,40}(sources|instructions|prompts|checks)",
+    r"you are now", r"system prompt", r"system (note|message)",
+    r"(send|post|upload|email|reveal|print)\s+.{0,60}(api key|password|token|credentials|system prompt)",
 ]
 _INJ = re.compile("|".join(f"(?:{p})" for p in INJECTION_PATTERNS), re.I)
 
@@ -132,11 +135,24 @@ PREFERRED_BY_FIELD: dict[str, list[str]] = {
 
 
 def scan_injection(text: str) -> list[str]:
+    """Layer 1 regex matches (substrings). Prefer page_injection_verdict for quarantine decisions."""
     return [m.group(0) for m in _INJ.finditer(text)]
 
 
+def page_injection_verdict(text: str, llm=None):
+    """Regex + optional classifier (Lab 9). Returns assessor.security.InjectionVerdict."""
+    from .security import inspect_untrusted_text
+    use_cls = SETTINGS.injection_classifier
+    return inspect_untrusted_text(text, llm=llm if use_cls else None, use_classifier=use_cls)
+
+
 def freshness(field: str, when: Optional[date], as_of: date) -> float:
-    """Half-life decay. Undated pages get 0.5: we neither trust nor discard them."""
+    """Half-life decay. Undated pages get 0.5: we neither trust nor discard them.
+
+    Ablation: ``VRA_FRESHNESS_DECAY=0`` forces 1.0 so old/undated pages are not down-weighted.
+    """
+    if not SETTINGS.freshness_decay:
+        return 1.0
     if when is None:
         return 0.5
     age = max(0, (as_of - when).days)
@@ -307,12 +323,17 @@ def cache_search(query: str, limit: int, prefer_domain: Optional[str] = None) ->
     return [h for _, h in scored[:limit]]
 
 
+_SEARCH_LOCK = threading.Lock()
+
+
 def live_search(query: str, limit: int, prefer_domain: Optional[str] = None) -> list[dict]:
     provider = SETTINGS.search_provider
     # Prefer cache when enabled so demos do not depend on the open internet.
+    # Important: do NOT fall through to DDGS on an empty cache hit — that re-introduces
+    # multi-minute serial search latency even when VRA_PAGE_CACHE=1.
     if SETTINGS.page_cache or provider == "cache":
         cached = cache_search(query, limit, prefer_domain=prefer_domain)
-        if cached or provider == "cache":
+        if cached or provider == "cache" or SETTINGS.page_cache:
             return cached
     if provider == "ddgs":
         try:
@@ -321,8 +342,11 @@ def live_search(query: str, limit: int, prefer_domain: Optional[str] = None) -> 
             if SETTINGS.page_cache:
                 return cache_search(query, limit, prefer_domain=prefer_domain)
             raise RuntimeError("pip install ddgs") from exc
+        # DDGS is not reliably thread-safe; serialize to avoid hung parallel workers.
         try:
-            return [{"url": r["href"], "title": r.get("title", ""), "snippet": r.get("body", "")} for r in DDGS().text(query, max_results=limit)]
+            with _SEARCH_LOCK:
+                raw = list(DDGS().text(query, max_results=limit))
+            return [{"url": r["href"], "title": r.get("title", ""), "snippet": r.get("body", "")} for r in raw]
         except Exception:
             if SETTINGS.page_cache:
                 return cache_search(query, limit, prefer_domain=prefer_domain)
@@ -345,23 +369,34 @@ def fetch(url: str) -> dict:
     if cached and cached.get("text"):
         return {"text": cached["text"][:20000], "published_date": cached.get("published_date"),
                 "title": cached.get("title") or url}
+    # Prefer httpx with a hard timeout — trafilatura can stall on bad DNS / JS shells.
+    import httpx  # noqa: WPS433
+    try:
+        r = httpx.get(
+            url,
+            timeout=8.0,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (vendor-risk-assessor)"},
+        )
+        r.raise_for_status()
+        html = r.text
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"fetch failed: {exc}") from exc
+    text = ""
+    title = url
+    pub = None
     try:
         import trafilatura
-        downloaded = trafilatura.fetch_url(url)
-        if downloaded:
-            meta = trafilatura.extract_metadata(downloaded)
-            text = trafilatura.extract(downloaded) or ""
-            pub = getattr(meta, "date", None) if meta else None
-            page = {"text": text[:20000], "published_date": pub, "title": (getattr(meta, "title", None) if meta else None) or url}
-            if SETTINGS.page_cache and page["text"]:
-                save_cached_page(url, page)
-            return page
+        meta = trafilatura.extract_metadata(html)
+        text = trafilatura.extract(html) or ""
+        pub = getattr(meta, "date", None) if meta else None
+        title = (getattr(meta, "title", None) if meta else None) or url
     except ImportError:
         pass
-    import httpx  # noqa: WPS433
-    r = httpx.get(url, timeout=20, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (vendor-risk-assessor)"})
-    text = re.sub(r"<[^>]+>", " ", r.text)
-    page = {"text": re.sub(r"\s+", " ", text)[:20000], "published_date": None, "title": url}
+    if not text:
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = re.sub(r"\s+", " ", text)
+    page = {"text": text[:20000], "published_date": pub, "title": title}
     if SETTINGS.page_cache and page["text"]:
         save_cached_page(url, page)
     return page
@@ -675,24 +710,61 @@ def evaluate_progress(
     return PlanDecision(action="continue", reasons=reasons, open_sub_questions=open_q)
 
 
+def official_seed_urls(domain: Optional[str]) -> list[dict]:
+    """High-value pages on the vendor's own domain — often cover most VENDOR_FIELDS alone."""
+    if not domain:
+        return []
+    d = domain.lower().lstrip(".")
+    # Keep this short: every seed may be fetched; prefer trust/security/privacy hubs.
+    paths = [
+        f"https://trust.{d}/",
+        f"https://www.{d}/trust",
+        f"https://www.{d}/security",
+        f"https://www.{d}/privacy",
+        f"https://www.{d}/legal/dpa",
+        f"https://www.{d}/subprocessors",
+        f"https://trust.{d}/subprocessors",
+        f"https://www.{d}/security-and-compliance",
+    ]
+    # Prefer already-cached official pages (instant fetch) ahead of guessed paths.
+    cached_hits: list[str] = []
+    if CACHED_PAGES_DIR.exists():
+        for path in CACHED_PAGES_DIR.glob("*.json"):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            url = doc.get("url") or ""
+            if url and _domain_matches(url, d) and (doc.get("text") or "").strip():
+                cached_hits.append(url)
+    seen: set[str] = set()
+    out: list[dict] = []
+    for url in cached_hits + paths:
+        if url in seen:
+            continue
+        seen.add(url)
+        out.append({"url": url, "title": url, "snippet": "official seed"})
+    return out
+
+
 def queries_for_subquestion(sq: SubQuestion, entity: EntityAnchor, iteration: int = 1) -> list[str]:
+    """One focused query on iteration 1; second angle only on retry (keeps DDGS calls down)."""
     n, d = entity.name, entity.official_domain
     field = sq.fields[0] if sq.fields else "security"
+    site = f"site:{d} " if d else ""
     templates = {
-        "legal_entity": [f"{n} legal entity headquarters about", f"{n} {d} company"],
-        "security_certifications": [f"{n} trust center SOC 2 ISO 27001", f"{n} SOC 2 Type II certificate"],
-        "data_regions": [f"{n} data residency region privacy", f"{n} data centers hosting location"],
-        "subprocessors": [f"{n} subprocessors list", f"{n} sub-processors third parties"],
-        "trains_on_customer_data": [f"{n} train on customer data AI privacy", f"{n} does not train models customer content"],
-        "data_retention": [f"{n} data retention deletion policy", f"{n} DPA retention period"],
-        "sso_saml": [f"{n} SAML SSO SSO pricing plan", f"{n} single sign-on enterprise"],
-        "security_incidents": [f"{n} security incident breach", f"{n} data breach postmortem"],
-        "dpa_available": [f"{n} data processing agreement DPA", f"{n} DPA GDPR"],
+        "legal_entity": [f"{site}{n} about company headquarters", f"{n} legal entity"],
+        "security_certifications": [f"{site}{n} trust center SOC 2 ISO 27001", f"{n} SOC 2 Type II"],
+        "data_regions": [f"{site}{n} data residency", f"{n} data centers regions"],
+        "subprocessors": [f"{site}{n} subprocessors", f"{n} sub-processors list"],
+        "trains_on_customer_data": [f"{site}{n} train on customer data", f"{n} does not train on customer content"],
+        "data_retention": [f"{site}{n} data retention deletion", f"{n} DPA retention"],
+        "sso_saml": [f"{site}{n} SAML SSO", f"{n} single sign-on enterprise"],
+        "security_incidents": [f"{site}{n} security incident", f"{n} data breach"],
+        "dpa_available": [f"{site}{n} data processing agreement DPA", f"{n} DPA GDPR"],
     }
-    qs = templates.get(field, [f"{n} {field.replace('_', ' ')}"])
-    if iteration > 1:
-        qs = [f"{q} {d}" if d else q for q in qs] + [f"site:{d} {field.replace('_', ' ')}" if d else qs[0]]
-    return qs[:2]
+    qs = templates.get(field, [f"{site}{n} {field.replace('_', ' ')}"])
+    return qs[:1] if iteration <= 1 else qs[:2]
 
 
 # ---------------------------------------------------------------------------
@@ -750,8 +822,11 @@ class VendorResearcher:
             ok = page["about_entity"] == official_domain
             return ok, ("same domain" if ok else f"page is about {page['about_entity']}, not {official_domain}")
 
-        # Live path: LLM decides — never silently accept. Gate stays a gate.
-        domain_hint = "yes" if _domain_matches(page.get("url", ""), official_domain) else "no"
+        # Live path: official-domain hosts pass the gate (trust/legal on vendor.com).
+        # Off-domain pages still need an LLM same-company decision — reject, do not down-weight.
+        if _domain_matches(page.get("url", ""), official_domain):
+            return True, "official domain match"
+        domain_hint = "no"
         user = (
             f"Vendor under review: {vendor}\n"
             f"Official domain: {official_domain or 'unknown'}\n"
@@ -762,14 +837,10 @@ class VendorResearcher:
         )
         try:
             if self.small.mock_mode and not self.offline_search:
-                # Live + mock LLM: domain match is a hard hint; non-matching hosts are rejected.
-                if domain_hint == "yes":
-                    return True, "mock live: official domain match"
                 return False, "mock live: host does not match official domain — rejected"
             chk = self.small.structured(
                 IDENTITY_SYSTEM, user, IdentityCheck, stage="identity",
-                mock=lambda: {"same_company": domain_hint == "yes" or self.offline_search,
-                              "reason": "mock identity"},
+                mock=lambda: {"same_company": False, "reason": "mock identity: non-official host"},
             )
             return chk.same_company, chk.reason
         except LLMError as exc:
@@ -788,11 +859,22 @@ class VendorResearcher:
             if page.get("mock_claims"):
                 return [Claim.model_validate(c) for c in page["mock_claims"]]
             return _rule_extract(page)
-        result = self.small.structured(
-            EXTRACT_SYSTEM,
-            f"URL: {page['url']}\nTitle: {page['title']}\nPublished: {page.get('published_date')}\n\n{page['text'][:12000]}",
-            ClaimList, stage="extract",
-        )
+        # Rule pass first — official trust/security pages often need no LLM round-trip.
+        ruled = _rule_extract(page)
+        if ruled:
+            return ruled
+        # Cached-page demos stay rule-only so local Ollama does not dominate wall time.
+        if SETTINGS.page_cache or SETTINGS.search_provider == "cache":
+            return ruled
+        # Spotlight untrusted page text (Lab 9 Layer 3) before it reaches the extractor.
+        from .security import spotlight
+        wrapped, rule = spotlight(page.get("text") or "", page.get("url") or "")
+        with _SEARCH_LOCK:
+            result = self.small.structured(
+                EXTRACT_SYSTEM + "\n" + rule,
+                f"URL: {page['url']}\nTitle: {page['title']}\nPublished: {page.get('published_date')}\n\n{wrapped[:6000]}",
+                ClaimList, stage="extract",
+            )
         return result.claims
 
     # ---- Module 5 + 6: validate and merge -------------------------------------------
@@ -810,7 +892,10 @@ class VendorResearcher:
         profile.pages_read = len(pages)
         kept: list[dict] = []
         for p in pages:
-            ok, why = self.identity_gate(p, vendor, official_domain)
+            if SETTINGS.identity_gate:
+                ok, why = self.identity_gate(p, vendor, official_domain)
+            else:
+                ok, why = True, "identity gate disabled (ablation)"
             if ok:
                 kept.append(p)
             else:
@@ -818,10 +903,10 @@ class VendorResearcher:
                 self._trace("identity_rejected", url=p["url"], reason=why)
         clean: list[dict] = []
         for p in kept:
-            hits = scan_injection(p["text"])
-            if hits:
+            verdict = page_injection_verdict(p["text"], llm=self.small)
+            if verdict.is_injection:
                 profile.quarantined.append(p["url"])
-                self._trace("quarantined", url=p["url"], patterns=hits[:3])
+                self._trace("quarantined", url=p["url"], layer=verdict.layer, patterns=verdict.findings[:3])
             else:
                 clean.append(p)
         evidence, dup_of = self._pages_to_evidence(clean, profile)
@@ -833,11 +918,16 @@ class VendorResearcher:
         self._trace("research_start", vendor=vendor, official_domain=official_domain, as_of=str(self.as_of), mode="live")
         memory = VendorMemory(official_domain or vendor) if SETTINGS.use_vendor_memory else None
 
-        try:
-            plan = create_plan(self.llm, vendor, official_domain, product=vendor)
-        except (LLMError, BudgetExceeded) as exc:
-            self._trace("plan_create_failed", error=str(exc)[:200])
+        if SETTINGS.llm_plan:
+            try:
+                plan = create_plan(self.llm, vendor, official_domain, product=vendor)
+            except (LLMError, BudgetExceeded) as exc:
+                self._trace("plan_create_failed", error=str(exc)[:200])
+                plan = _mock_plan(vendor, official_domain, vendor)
+        else:
+            # Deterministic plan + reviewer: same field coverage without a multi-minute 7b JSON call.
             plan = _mock_plan(vendor, official_domain, vendor)
+            self._trace("plan_create_skipped", reason="VRA_LLM_PLAN=0; using mock plan")
         plan, review = review_plan(plan)
         self._trace("plan_ready", approved=review.approved, issues=review.issues[:5],
                     n_questions=len(plan.sub_questions), fixes=review.fixes_applied[:5])
@@ -919,38 +1009,80 @@ class VendorResearcher:
         iteration: int,
     ) -> tuple[int, list[Evidence], dict[str, int]]:
         """Parallel search → fetch → identity → extract. Returns (pages, evidence, failure bumps)."""
-        jobs: list[tuple[SubQuestion, str, dict]] = []  # sq, url, search hit
+        # Candidates: (priority, order, sq, url, hit) — lower priority fetched first; capped by max_pages.
+        candidates: list[tuple[int, int, SubQuestion, str, dict]] = []
         fail_bump: dict[str, int] = {}
+        max_pages = max(1, SETTINGS.max_pages)
+        default_sq = sub_questions[0] if sub_questions else None
+        order_i = 0
 
+        def _consider(sq: Optional[SubQuestion], hit: dict, priority: int) -> None:
+            nonlocal order_i
+            url = (hit.get("url") or "").strip()
+            if not url or default_sq is None:
+                return
+            target = sq or default_sq
+            if memory and memory.is_blocked_host(url) and not _domain_matches(url, official_domain):
+                self._trace("memory_skip_blocked", url=url)
+                return
+            if memory and memory.should_skip_fetch(url):
+                self._trace("memory_skip_fresh", url=url)
+                return
+            candidates.append((priority, order_i, target, url, hit))
+            order_i += 1
+
+        # Iteration 1: seed official trust/legal URLs (priority 0 — preferred over search hits).
+        if iteration == 1 and official_domain and default_sq is not None:
+            seeds = official_seed_urls(official_domain)
+            for hit in seeds:
+                _consider(default_sq, hit, 0)
+            self._trace("official_seeds", domain=official_domain, n=len(seeds))
+
+        # Parallelise DDGS/Tavily queries (serial search was the main wall-time cost).
+        search_tasks: list[tuple[SubQuestion, str]] = []
         for sq in sub_questions:
             if self.budget.spent_usd >= self.budget.max_usd:
                 raise BudgetExceeded(f"Budget of ${self.budget.max_usd:.2f} exceeded before search.")
-            got_any = False
             for q in queries_for_subquestion(sq, entity, iteration):
-                try:
-                    hits = live_search(q, SETTINGS.results_per_query, prefer_domain=official_domain)
-                except Exception as exc:  # noqa: BLE001
-                    self._trace("search_failed", query=q, error=str(exc)[:120])
-                    hits = []
+                search_tasks.append((sq, q))
+
+        def _one_search(item: tuple[SubQuestion, str]) -> tuple[SubQuestion, str, list[dict]]:
+            sq, q = item
+            try:
+                hits = live_search(q, SETTINGS.results_per_query, prefer_domain=official_domain)
+            except Exception as exc:  # noqa: BLE001
+                self._trace("search_failed", query=q, error=str(exc)[:120])
+                hits = []
+            return sq, q, hits
+
+        sq_got: dict[str, bool] = {sq.id: False for sq in sub_questions}
+        with ThreadPoolExecutor(max_workers=max(1, SETTINGS.max_parallel)) as pool:
+            for sq, q, hits in pool.map(_one_search, search_tasks):
                 self._trace("search", query=q, results=len(hits), sq=sq.id)
+                if hits:
+                    sq_got[sq.id] = True
                 for h in hits:
-                    url = h.get("url") or ""
-                    with self._lock:
-                        if not url or url in seen_urls:
-                            continue
-                        seen_urls.add(url)
-                    # Only skip hosts we previously rejected for THIS vendor's domain.
-                    if memory and memory.is_blocked_host(url) and not _domain_matches(url, official_domain):
-                        self._trace("memory_skip_blocked", url=url)
-                        continue
-                    if memory and memory.should_skip_fetch(url):
-                        self._trace("memory_skip_fresh", url=url)
-                        continue
-                    jobs.append((sq, url, h))
-                    got_any = True
-            if not got_any:
+                    # Official-domain hits beat third-party pages.
+                    pri = 1 if _domain_matches(h.get("url", ""), official_domain) else 2
+                    _consider(sq, h, pri)
+
+        if not candidates and not any(sq_got.values()):
+            for sq in sub_questions:
                 for f in sq.fields:
                     fail_bump[f] = fail_bump.get(f, 0) + 1
+
+        # Dedupe by URL, keep best priority / earliest order, hard-cap fetch+extract.
+        candidates.sort(key=lambda c: (c[0], c[1]))
+        jobs: list[tuple[SubQuestion, str, dict]] = []
+        for _pri, _ord, sq, url, hit in candidates:
+            with self._lock:
+                if url in seen_urls:
+                    continue
+                if len(jobs) >= max_pages:
+                    break
+                seen_urls.add(url)
+            jobs.append((sq, url, hit))
+        self._trace("jobs_selected", n=len(jobs), max_pages=max_pages, candidates=len(candidates))
 
         evidence: list[Evidence] = []
         pages_done = 0
@@ -976,19 +1108,22 @@ class VendorResearcher:
                 "last_updated": None,
                 "text": page.get("text") or "",
             }
-            ok, why = self.identity_gate(doc, entity.name, official_domain, product=entity.product)
+            if SETTINGS.identity_gate:
+                ok, why = self.identity_gate(doc, entity.name, official_domain, product=entity.product)
+            else:
+                ok, why = True, "identity gate disabled (ablation)"
             if not ok:
                 with self._lock:
                     if url not in profile.rejected:
                         profile.rejected.append(url)
                 self._trace("identity_rejected", url=url, reason=why)
                 return doc, [], None, None
-            hits = scan_injection(doc["text"])
-            if hits:
+            verdict = page_injection_verdict(doc["text"], llm=self.small)
+            if verdict.is_injection:
                 with self._lock:
                     if url not in profile.quarantined:
                         profile.quarantined.append(url)
-                self._trace("quarantined", url=url, patterns=hits[:3])
+                self._trace("quarantined", url=url, layer=verdict.layer, patterns=verdict.findings[:3])
                 return doc, [], None, None
             try:
                 claims = self._extract_claims_live(doc)

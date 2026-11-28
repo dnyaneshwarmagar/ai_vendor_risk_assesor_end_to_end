@@ -1,0 +1,49 @@
+# Milestone 5 — Redis + Postgres for queued assessments and durable history.
+# SQLite works without Docker for local demos (default when DATABASE_URL is empty).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vra
+      POSTGRES_PASSWORD: vra
+      POSTGRES_DB: vendor_risk
+    ports:
+      - "5433:5432"
+    volumes:
+      - vra_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    command: uvicorn app.api:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://vra:vra@db:5432/vendor_risk
+      REDIS_URL: redis://redis:6379/0
+      QUEUE_NAME: assess
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-offline}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build: .
+    command: python -m app.worker
+    environment:
+      DATABASE_URL: postgresql://vra:vra@db:5432/vendor_risk
+      REDIS_URL: redis://redis:6379/0
+      QUEUE_NAME: assess
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      SEARCH_PROVIDER: ${SEARCH_PROVIDER:-offline}
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  vra_pg:

@@ -1,0 +1,35 @@
+{
+  "domain": "notion.so",
+  "pages": {
+    "https://www.notion.so/privacy": {
+      "published_date": "2026-11-27",
+      "last_updated": null,
+      "retrieved_at": "2026-11-28"
+    },
+    "https://www.notion.so/trust": {
+      "published_date": null,
+      "last_updated": null,
+      "retrieved_at": "2026-11-28"
+    },
+    "https://www.notion.so/subprocessors": {
+      "published_date": "2026-11-27",
+      "last_updated": null,
+      "retrieved_at": "2026-11-28"
+    },
+    "https://www.notion.so/legal/dpa": {
+      "published_date": null,
+      "last_updated": null,
+      "retrieved_at": "2026-11-28"
+    },
+    "https://www.notion.so/security": {
+      "published_date": "2026-01-01",
+      "last_updated": null,
+      "retrieved_at": "2026-11-28"
+    }
+  },
+  "rejected_hosts": [],
+  "quarantined_hosts": [
+    "www.notion.so"
+  ],
+  "last_run": "2026-11-27T23:49:00.777339+00:00"
+}

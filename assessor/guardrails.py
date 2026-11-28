@@ -8,10 +8,10 @@ COURSE MAP
   Production RAG  Module 11 (PII redaction; prompt injection through documents)
   Deep Search     Module 8  (defence in depth; the "lethal trifecta": private data + untrusted content + a way out)
 
-WHAT IS COMPLETE: regex-based input redaction (secrets, personal identifiers), an "approve" interception, and
-an output policy (never say "approved"; every PASS/FAIL must carry evidence).
-LEARNER TODO — Milestone 4: add an LLM-based injection classifier as a second layer behind the regexes
-(Deep Search Lab 9), and a red-team suite of 15 attack questions that must all be caught (put it in tests/).
+WHAT IS COMPLETE: regex-based input redaction (secrets, personal identifiers), an "approve" interception,
+an output policy (never say "approved"; every PASS/FAIL must carry evidence), plus Milestone 4:
+  * Layer-2 injection classifier in assessor.security (behind regexes; see tests/test_red_team.py)
+  * Intent check / output guardrail catch points asserted by the red-team suite
 """
 
 from __future__ import annotations
